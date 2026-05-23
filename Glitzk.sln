@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.14.36717.8
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Glitzk", "ChTubePlayer\Glitzk.csproj", "{A067A341-52A4-41C7-9ED3-ABE9C051F519}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{A067A341-52A4-41C7-9ED3-ABE9C051F519}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A067A341-52A4-41C7-9ED3-ABE9C051F519}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A067A341-52A4-41C7-9ED3-ABE9C051F519}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A067A341-52A4-41C7-9ED3-ABE9C051F519}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {8F50BD1B-3824-4BD5-96EE-167FB9DA1A90}
+	EndGlobalSection
+EndGlobal
