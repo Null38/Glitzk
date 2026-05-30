@@ -55,7 +55,7 @@ class ChzzkChatReader : IDisposable
 
             var res = await session.SubscribeEventAsync(settings.data.AccessToken!, EventType.Chat);
 
-            if (res.Code == ChzzkApiException.StatusCode.Unauthorized)
+            if (res.Code == ChzzkStatusCode.Unauthorized)
             {
                 await EnsureAccessTokenAsync();
 
@@ -64,7 +64,7 @@ class ChzzkChatReader : IDisposable
                 res = await session.SubscribeEventAsync(settings.data.AccessToken!, EventType.Chat);
             }
 
-            if (res.Code != ChzzkApiException.StatusCode.Success)
+            if (res.Code != ChzzkStatusCode.Success)
                 throw new ChzzkApiException(res);
 
             accessToken = settings.data.AccessToken;
@@ -88,7 +88,7 @@ class ChzzkChatReader : IDisposable
         var code = await ChzzkApi.WaitForAuthorizationCodeAsync(RedirectUri, state, ct: ct);
 
         var issued = await api.IssueAccessTokenAsync(code, state);
-        if (issued.Code != ChzzkApiException.StatusCode.Success)
+        if (issued.Code != ChzzkStatusCode.Success)
             throw new ChzzkApiException(issued);
 
         settings.data.AccessToken = issued.Content!.AccessToken;
@@ -102,7 +102,7 @@ class ChzzkChatReader : IDisposable
         {
             var refreshed = await api.RefreshAccessTokenAsync(settings.data.RefreshToken);
 
-            if (refreshed.Code == ChzzkApiException.StatusCode.Success)
+            if (refreshed.Code == ChzzkStatusCode.Success)
             {
                 settings.data.AccessToken = refreshed.Content!.AccessToken;
                 settings.data.RefreshToken = refreshed.Content!.RefreshToken;
@@ -111,7 +111,7 @@ class ChzzkChatReader : IDisposable
                 return;
             }
 
-            if (refreshed.Code != ChzzkApiException.StatusCode.Unauthorized)
+            if (refreshed.Code != ChzzkStatusCode.Unauthorized)
                 throw new ChzzkApiException(refreshed);
         }
 

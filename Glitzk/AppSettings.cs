@@ -1,4 +1,6 @@
+using System.ComponentModel;
 using System.IO;
+using System.Reflection;
 using System.Xml.Serialization;
 
 namespace ChTubePlayer
@@ -12,9 +14,34 @@ namespace ChTubePlayer
             public string? AccessToken;
             public string? RefreshToken;
 
-            //[XmlArray("Commands")]
-            //[XmlArrayItem("Command")]
-            //public string[] Commands;
+
+            [XmlIgnore]
+            public Dictionary<string, string> Commands;
+
+            [XmlArray("Commands")]
+            [XmlArrayItem("Command")]
+            [EditorBrowsable(EditorBrowsableState.Never)]
+            public Command[] CommandArray
+            {
+                get => Commands.Select(pair => new Command { Key = pair.Key, Value = pair.Value }).ToArray();
+                set
+                {
+                    Commands = new Dictionary<string, string>();
+                    if (value == null) return;
+                    foreach (var command in value)
+                        Commands[command.Key] = command.Value;
+                }
+            }
+
+
+            public struct Command
+            {
+                [XmlAttribute("key")]
+                public string Key;
+
+                [XmlText]
+                public string Value;
+            }
 
             public SaveData()
             {
@@ -22,6 +49,12 @@ namespace ChTubePlayer
                 ClientSecret = string.Empty;
                 AccessToken = null;
                 RefreshToken = null;
+
+                Commands = new Dictionary<string, string>
+                {
+                    ["!sr"] = "Song Request",
+                    ["!¤¤¤¡"] = "Song Request",
+                };
             }
         }
 
@@ -63,10 +96,16 @@ namespace ChTubePlayer
 
         private void Merge(SaveData loaded)
         {
-            if (!string.IsNullOrEmpty(loaded.ClientId)) data.ClientId = loaded.ClientId;
-            if (!string.IsNullOrEmpty(loaded.ClientSecret)) data.ClientSecret = loaded.ClientSecret;
-            if (loaded.AccessToken != null) data.AccessToken = loaded.AccessToken;
-            if (loaded.RefreshToken != null) data.RefreshToken = loaded.RefreshToken;
+            object boxed = data;
+
+            foreach (var field in typeof(SaveData).GetFields(BindingFlags.Public | BindingFlags.Instance))
+            {
+                var value = field.GetValue(loaded);
+                if (field.FieldType.IsInstanceOfType(value))
+                    field.SetValue(boxed, value);
+            }
+
+            data = (SaveData)boxed;
         }
     }
 }

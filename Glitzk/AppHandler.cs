@@ -15,6 +15,12 @@ using System.Runtime.InteropServices;
 
 namespace ChTubePlayer;
 
+public record CommandContext(
+    string SenderId,
+    UserRoleCode Role,
+    string Args,
+    long MessageTime);
+
 class AppHandler
 {
     private IntPtr glContext;
@@ -27,6 +33,8 @@ class AppHandler
     private CancellationTokenSource? connectCts;
 
     private LinkedList<VideoData> videoQueue = new();
+
+    private readonly Dictionary<string, Action<CommandContext>> commandFunction = new();
 
     private bool showSettings = false;
     private string virtualChatInput = string.Empty;
@@ -46,7 +54,9 @@ class AppHandler
         main.EventReceived += OnEvent;
 
         chatReader = new(Program.Services.GetRequiredService<ChzzkApi.Factory>().Create(string.Empty, string.Empty), settings);
-        chatReader.ChatReceived += OnChatReceived;
+        chatReader.ChatReceived += (msg) => OnChatReceived(msg.Content, msg.SenderChannelId, msg.Profile.UserRoleCode, msg.MessageTime);
+
+        commandFunction["Song Request"] = HandleSongRequest;
     }
 
     #region Lifecycle
@@ -157,9 +167,7 @@ class AppHandler
 
     #endregion Lifecycle
 
-    private void OnChatReceived(ChatMessage msg) => ProcessChat(msg.Content);
-
-    private void ProcessChat(string content)
+    private void OnChatReceived(string content, string senderId, UserRoleCode role, long messageTime)
     {
         string[] split = content.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
 
@@ -168,16 +176,19 @@ class AppHandler
             return;
         }
 
-        if (split[0] == "!sr" || split[0] == "!ㄴㄱ")
-        {
-            _ = EnqueueVideoAsync(split[1]);
-        }
-        
+        bool hasMethod = settings.data.Commands.TryGetValue(split[0], out string? method);
+
+        if (!hasMethod || !commandFunction.TryGetValue(method!, out var action)) 
+            return;
+
+        action(new CommandContext(senderId, role, split[1], messageTime));
     }
 
-    private async Task EnqueueVideoAsync(string content)
+    private void HandleSongRequest(CommandContext context) => _ = EnqueueVideoAsync(context);
+
+    private async Task EnqueueVideoAsync(CommandContext context)
     {
-        var video = await YoutubeIdExtractor.ResolveVideoId(content);
+        var video = await YoutubeIdExtractor.ResolveVideoId(context.Args);
         if (video is null) return;
 
         videoQueue.AddLast(video.Value);
@@ -300,7 +311,7 @@ class AppHandler
         ImGui.SameLine();
         if ((enter || ImGui.Button("Send")) && !string.IsNullOrWhiteSpace(virtualChatInput))
         {
-            ProcessChat(virtualChatInput);
+            OnChatReceived(virtualChatInput, string.Empty, UserRoleCode.CommonUser, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
             virtualChatInput = string.Empty;
         }
 
