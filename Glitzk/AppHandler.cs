@@ -21,17 +21,6 @@ public record CommandContext(
     string Args,
     long MessageTime);
 
-public record class AutoVideo
-{
-    public AutoVideo(VideoData video)
-    {
-        Video = video;
-    }
-
-    public VideoData Video { get; set; }
-    public int Plays { get; set; } = 0;
-}
-
 class AppHandler
 {
     private const float BackgroundBrightness = 25 / 255f;
@@ -68,8 +57,6 @@ class AppHandler
     private CancellationTokenSource? connectCts;
 
     private LinkedList<VideoData> videoQueue = new();
-    private List<AutoVideo> autoList = new();
-    private string autoListInput = string.Empty;
 
     private readonly Dictionary<string, Action<CommandContext>> commandFunction = new();
 
@@ -78,6 +65,7 @@ class AppHandler
     private string virtualChatInput = string.Empty;
     private string newCmdTrigger = string.Empty;
     private int newCmdFuncIndex = 0;
+    private string autoListInput = string.Empty;
 
     private readonly AppWindow main;
     private readonly AppWindow video;
@@ -240,32 +228,33 @@ class AppHandler
             return;
         }
 
-        if (autoList.Count > 0)
+        if (App.Data.AutoList.Count > 0)
             videoPlayer.LoadVideo(PickFromAutoList());
     }
 
     private string PickFromAutoList()
     {
-        if (autoList.Count == 1)
-        {
-            autoList[0].Plays++;
+        var list = App.Data.AutoList;
 
-            return autoList[0].Video.id;
+        if (list.Count == 1)
+        {
+            list[0].Plays++;
+            return list[0].Video.id;
         }
 
-        int a = Random.Shared.Next(autoList.Count);
-        int b = Random.Shared.Next(autoList.Count - 1);
+        int a = Random.Shared.Next(list.Count);
+        int b = Random.Shared.Next(list.Count - 1);
         if (b >= a)
             b++;
 
         int play = b;
 
-        if (autoList[a].Plays < autoList[b].Plays)
+        if (list[a].Plays < list[b].Plays)
             play = a;
 
-        autoList[play].Plays++;
+        list[play].Plays++;
 
-        return autoList[play].Video.id;
+        return list[play].Video.id;
     }
 
     private async Task AddToAutoListAsync(string input)
@@ -274,7 +263,8 @@ class AppHandler
         if (video is null)
             return;
 
-        autoList.Add(new(video.Value));
+        App.Data.AutoList.Add(new(video.Value));
+        AppRecord.Save(App.Data);
     }
 
     #region ImGui
@@ -422,6 +412,7 @@ class AppHandler
 
         ImGui.BeginChild("AutoList", new Vector2(width, ListHeight), ImGuiChildFlags.Borders);
 
+        var autoList = App.Data.AutoList;
         int toRemove = -1;
         for (int i = 0; i < autoList.Count; i++)
         {
@@ -445,7 +436,10 @@ class AppHandler
         ImGui.EndChild();
 
         if (toRemove >= 0)
+        {
             autoList.RemoveAt(toRemove);
+            AppRecord.Save(App.Data);
+        }
 
         ImGui.EndGroup();
     }

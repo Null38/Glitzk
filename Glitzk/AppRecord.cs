@@ -1,12 +1,25 @@
+using ChTubePlayer.Services;
 using System.ComponentModel;
 using System.IO;
-using System.Reflection;
 using System.Xml.Serialization;
 
 namespace ChTubePlayer;
 
-// TODO: static 클래스로 전환 — 인스턴스 불필요. SaveData는 App.Data 필드로 이관.
-//       Save()/Load()는 App.Record를 직접 조작하도록 수정.
+public record class AutoVideo
+{
+    public AutoVideo() { Video = default; }
+
+    public AutoVideo(VideoData video)
+    {
+        Video = video;
+    }
+
+    public VideoData Video { get; set; }
+
+    [XmlIgnore]
+    public int Plays { get; set; } = 0;
+}
+
 public static class AppRecord
 {
     public struct SaveData
@@ -16,6 +29,8 @@ public static class AppRecord
         public string? AccessToken;
         public string? RefreshToken;
 
+
+        public List<AutoVideo> AutoList;
 
         [XmlIgnore]
         public Dictionary<string, string> Commands;
@@ -57,6 +72,8 @@ public static class AppRecord
                 ["!sr"] = "Song Request",
                 ["!노래"] = "Song Request",
             };
+
+            AutoList = new List<AutoVideo>();
         }
     }
 
