@@ -29,36 +29,55 @@ class WebView2VideoPlayer : IVideoPlayer
 <html style='margin:0;padding:0;width:100%;height:100%;'>
 <head><meta http-equiv='X-UA-Compatible' content='IE=edge'/></head>
 <body style='margin:0;padding:0;width:100%;height:100%;overflow:hidden;'>
-<iframe id='ytPlayer'
-    style='display:block;width:100%;height:100%;border:none;'
-    allow='autoplay;encrypted-media'
-    allowfullscreen>
-</iframe>
+<div id='ytPlayer' style='width:100%;height:100%;'></div>
 <script>
     var tag = document.createElement('script');
     tag.src = 'https://www.youtube.com/iframe_api';
     document.head.appendChild(tag);
 
     var player = null;
+    var pendingVideoId = null;
 
-    function onYouTubeIframeAPIReady() {{}}
-
-    window.loadVideo = function(videoId) {{
-        if (player) {{
-            player.loadVideoById(videoId);
-            return;
-        }}
-        var iframe = document.getElementById('ytPlayer');
-        iframe.src = 'https://www.youtube-nocookie.com/embed/' + videoId +
-            '?autoplay=1&controls=1&enablejsapi=1&origin={VirtualOrigin}';
+    function onYouTubeIframeAPIReady() {{
         player = new YT.Player('ytPlayer', {{
+            host: 'https://www.youtube-nocookie.com',
+            width: '100%',
+            height: '100%',
+            playerVars: {{ controls: 1, origin: '{VirtualOrigin}' }},
             events: {{
-                onStateChange: function(e) {{
-                    if (e.data === YT.PlayerState.ENDED)
-                        window.chrome.webview.postMessage('ended');
-                }}
+                onReady: onPlayerReady,
+                onStateChange: onPlayerStateChange,
+                onError: onPlayerError
             }}
         }});
+    }}
+
+    function onPlayerReady(e) {{
+        //player.setVolume(50);
+
+        if (pendingVideoId !== null) {{
+            var id = pendingVideoId;
+            pendingVideoId = null;
+            player.loadVideoById(id);
+        }}
+    }}
+
+    function onPlayerStateChange(e) {{
+        if (e.data === YT.PlayerState.ENDED)
+            window.chrome.webview.postMessage('next');
+    }}
+
+    function onPlayerError(e) {{
+        if (e.data === 100 || e.data === 101 || e.data === 150)
+            window.chrome.webview.postMessage('next');
+    }}
+
+    window.loadVideo = function(videoId) {{
+        if (player && player.loadVideoById) {{
+            player.loadVideoById(videoId);
+        }} else {{
+            pendingVideoId = videoId;
+        }}
     }};
 </script>
 </body>
@@ -104,10 +123,10 @@ class WebView2VideoPlayer : IVideoPlayer
                 controller.CoreWebView2.WebResourceRequested += OnWebResourceRequested;
                 controller.CoreWebView2.WebMessageReceived += (s, e) =>
                 {
-                    if (e.TryGetWebMessageAsString() == "ended")
+                    if (e.TryGetWebMessageAsString() == "next")
                     {
-                        VideoEnd?.Invoke();
                         isPlaying = false;
+                        VideoEnd?.Invoke();
                     }
                 };
                 controller.CoreWebView2.Navigate(PlayerUrl);

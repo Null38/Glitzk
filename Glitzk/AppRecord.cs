@@ -1,0 +1,96 @@
+using System.ComponentModel;
+using System.IO;
+using System.Reflection;
+using System.Xml.Serialization;
+
+namespace ChTubePlayer;
+
+// TODO: static 클래스로 전환 — 인스턴스 불필요. SaveData는 App.Data 필드로 이관.
+//       Save()/Load()는 App.Record를 직접 조작하도록 수정.
+public static class AppRecord
+{
+    public struct SaveData
+    {
+        public string ClientId;
+        public string ClientSecret;
+        public string? AccessToken;
+        public string? RefreshToken;
+
+
+        [XmlIgnore]
+        public Dictionary<string, string> Commands;
+
+        [XmlArray("Commands")]
+        [XmlArrayItem("Command")]
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public Command[] CommandArray
+        {
+            get => Commands.Select(pair => new Command { Key = pair.Key, Value = pair.Value }).ToArray();
+            set
+            {
+                Commands = new Dictionary<string, string>();
+                if (value == null) return;
+                foreach (var command in value)
+                    Commands[command.Key] = command.Value;
+            }
+        }
+
+
+        public struct Command
+        {
+            [XmlAttribute("key")]
+            public string Key;
+
+            [XmlText]
+            public string Value;
+        }
+
+        public SaveData()
+        {
+            ClientId = string.Empty;
+            ClientSecret = string.Empty;
+            AccessToken = null;
+            RefreshToken = null;
+
+            Commands = new Dictionary<string, string>
+            {
+                ["!sr"] = "Song Request",
+                ["!노래"] = "Song Request",
+            };
+        }
+    }
+
+    private static readonly string FilePath =
+        Path.Combine(AppContext.BaseDirectory, "program.setting");
+
+    static public void Save(SaveData data)
+    {
+        var serializer = new XmlSerializer(typeof(SaveData));
+        using var writer = new StreamWriter(FilePath);
+        serializer.Serialize(writer, data);
+    }
+
+    static public SaveData Load()
+    {
+        if (!File.Exists(FilePath))
+        {
+            SaveData newData = new();
+
+            Save(newData);
+            return newData;
+        }
+
+        var serializer = new XmlSerializer(typeof(SaveData));
+
+        try
+        {
+            using var reader = new StreamReader(FilePath);
+            var loaded = (SaveData?)serializer.Deserialize(reader);
+            if (loaded.HasValue)
+                return loaded.Value;
+        }
+        catch (InvalidOperationException){}
+
+        return new();
+    }
+}

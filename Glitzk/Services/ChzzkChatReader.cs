@@ -1,6 +1,8 @@
 using ChzzkApi_CS;
 using ChzzkApi_CS.Session;
+using System.Collections.Specialized;
 using System.Diagnostics;
+using System.Net;
 using System.Runtime.InteropServices;
 
 namespace ChTubePlayer.Services;
@@ -21,14 +23,12 @@ class ChzzkChatReader : IDisposable
     const string RedirectUri = "http://localhost:8080/api/path/";
 
     private readonly ChzzkApi api;
-    private AppSettings settings;
     private ChzzkSession? session;
     private string? accessToken;
 
-    public ChzzkChatReader(ChzzkApi api, AppSettings settings)
+    public ChzzkChatReader(ChzzkApi api)
     {
         this.api = api;
-        this.settings = settings;
     }
 
     public async Task ConnectAsync(CancellationToken ct = default)
@@ -40,9 +40,9 @@ class ChzzkChatReader : IDisposable
 
         try
         {
-            api.SetCredentials(settings.data.ClientId, settings.data.ClientSecret);
+            api.SetCredentials(App.Data.ClientId, App.Data.ClientSecret);
 
-            if (settings.data.AccessToken is null)
+            if (App.Data.AccessToken is null)
                 await RunOAuthFlowAsync(ct);
 
             ct.ThrowIfCancellationRequested();
@@ -53,7 +53,7 @@ class ChzzkChatReader : IDisposable
 
             ct.ThrowIfCancellationRequested();
 
-            var res = await session.SubscribeEventAsync(settings.data.AccessToken!, EventType.Chat);
+            var res = await session.SubscribeEventAsync(App.Data.AccessToken!, EventType.Chat);
 
             if (res.Code == ChzzkStatusCode.Unauthorized)
             {
@@ -61,13 +61,13 @@ class ChzzkChatReader : IDisposable
 
                 ct.ThrowIfCancellationRequested();
 
-                res = await session.SubscribeEventAsync(settings.data.AccessToken!, EventType.Chat);
+                res = await session.SubscribeEventAsync(App.Data.AccessToken!, EventType.Chat);
             }
 
             if (res.Code != ChzzkStatusCode.Success)
                 throw new ChzzkApiException(res);
 
-            accessToken = settings.data.AccessToken;
+            accessToken = App.Data.AccessToken;
             State = ConnectionState.Connected;
         }
         catch (OperationCanceledException)
@@ -85,28 +85,47 @@ class ChzzkChatReader : IDisposable
     {
         var authUri = api.GetAuthorizationUri(RedirectUri, out string state);
         OpenUrl(authUri);
-        var code = await ChzzkApi.WaitForAuthorizationCodeAsync(RedirectUri, state, ct: ct);
+
+        Func<HttpListenerResponse, NameValueCollection, Task> response = async (response, _) =>
+        {
+            response.ContentType = "text/html; charset=utf-8";
+
+            const string html = 
+"""
+<html>
+<body>
+    <h2>인증 완료.</h2>
+</body>
+</html>
+""";
+
+            var bytes = System.Text.Encoding.UTF8.GetBytes(html);
+            await response.OutputStream.WriteAsync(bytes);
+            response.Close();
+        };
+
+        var code = await ChzzkApi.WaitForAuthorizationCodeAsync(RedirectUri, state, configureResponse: response, ct: ct);
 
         var issued = await api.IssueAccessTokenAsync(code, state);
         if (issued.Code != ChzzkStatusCode.Success)
             throw new ChzzkApiException(issued);
 
-        settings.data.AccessToken = issued.Content!.AccessToken;
-        settings.data.RefreshToken = issued.Content!.RefreshToken;
-        settings.Save();
+        App.Data.AccessToken = issued.Content!.AccessToken;
+        App.Data.RefreshToken = issued.Content!.RefreshToken;
+        AppRecord.Save(App.Data);
     }
 
     private async Task EnsureAccessTokenAsync()
     {
-        if (settings.data.RefreshToken is not null)
+        if (App.Data.RefreshToken is not null)
         {
-            var refreshed = await api.RefreshAccessTokenAsync(settings.data.RefreshToken);
+            var refreshed = await api.RefreshAccessTokenAsync(App.Data.RefreshToken);
 
             if (refreshed.Code == ChzzkStatusCode.Success)
             {
-                settings.data.AccessToken = refreshed.Content!.AccessToken;
-                settings.data.RefreshToken = refreshed.Content!.RefreshToken;
-                settings.Save();
+                App.Data.AccessToken = refreshed.Content!.AccessToken;
+                App.Data.RefreshToken = refreshed.Content!.RefreshToken;
+                AppRecord.Save(App.Data);
 
                 return;
             }

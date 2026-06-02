@@ -21,23 +21,63 @@ public record CommandContext(
     string Args,
     long MessageTime);
 
+public record class AutoVideo
+{
+    public AutoVideo(VideoData video)
+    {
+        Video = video;
+    }
+
+    public VideoData Video { get; set; }
+    public int Plays { get; set; } = 0;
+}
+
 class AppHandler
 {
+    private const float BackgroundBrightness = 25 / 255f;
+    private const float FontSize = 18f;
+    private const float AnimationSpeed = 1f;
+
+    private const float ListMaxWidth = 500f;
+    private const int ListHeight = 300;
+    private const int VideoItemHeight = 60;
+    private const float AutoListSideBySideThreshold = 200f;
+    private const int AutoListInputBufferSize = 512;
+
+    private const float ChatTestWindowWidth = 400f;
+    private const float ChatTestWindowHeight = 120f;
+    private const float ChatTestInputWidth = 300f;
+    private const int   VirtualChatBufferSize = 256;
+
+    private const float SettingsWindowWidth  = 400f;
+    private const float SettingsWindowHeight = 320f;
+    private const int CredentialBufferSize = 128;
+
+    private const float TriggerColumnWidth = 120f;
+    private const int CommandListHeight = 160;
+    private const int CommandItemHeight = 34;
+    private const int NewTriggerBufferSize = 64;
+    private const float FuncComboWidth = 150f;
+
     private IntPtr glContext;
     private GL? gl;
     private ImGuiIOPtr io;
 
-    private readonly AppSettings settings = new();
     private IVideoPlayer videoPlayer = new NullVideoPlayer();
     ChzzkChatReader chatReader;
     private CancellationTokenSource? connectCts;
 
     private LinkedList<VideoData> videoQueue = new();
+    private List<AutoVideo> autoList = new();
+    private string autoListInput = string.Empty;
 
     private readonly Dictionary<string, Action<CommandContext>> commandFunction = new();
 
+    private bool isTest = false;
     private bool showSettings = false;
     private string virtualChatInput = string.Empty;
+    private string newCmdTrigger = string.Empty;
+    private int newCmdFuncIndex = 0;
 
     private readonly AppWindow main;
     private readonly AppWindow video;
@@ -53,7 +93,7 @@ class AppHandler
         main.Closing += OnClosing;
         main.EventReceived += OnEvent;
 
-        chatReader = new(Program.Services.GetRequiredService<ChzzkApi.Factory>().Create(string.Empty, string.Empty), settings);
+        chatReader = new(App.Services.GetRequiredService<ChzzkApi.Factory>().Create(string.Empty, string.Empty));
         chatReader.ChatReceived += (msg) => OnChatReceived(msg.Content, msg.SenderChannelId, msg.Profile.UserRoleCode, msg.MessageTime);
 
         commandFunction["Song Request"] = HandleSongRequest;
@@ -86,17 +126,14 @@ class AppHandler
 
         gl = new GL(new BindingsContext(main.Handle, glContext));
 
-        settings.Load();
         videoPlayer = VideoPlayerFactory.Create(video.Handle);
+        videoPlayer.VideoEnd = OnVideoEnded;
     }
 
     private void OnUpdate(double dt)
     {
         if (videoQueue.Count > 0 && !videoPlayer.IsPlaying)
-        {
-            videoPlayer.LoadVideo(videoQueue.First!.Value.id);
-            videoQueue.RemoveFirst();
-        }
+            OnVideoEnded();
 
         videoPlayer.Tick();
 
@@ -116,7 +153,7 @@ class AppHandler
         ImGui.EndFrame();
 
         gl!.Viewport(0, 0, (int)io.DisplaySize.X, (int)io.DisplaySize.Y);
-        gl.ClearColor(25 / 255f, 25 / 255f, 25 / 255f, 0);
+        gl.ClearColor(BackgroundBrightness, BackgroundBrightness, BackgroundBrightness, 0);
         gl.Clear(GLClearBufferMask.ColorBufferBit);
 
         ImGuiImplOpenGL3.RenderDrawData(ImGui.GetDrawData());
@@ -152,7 +189,7 @@ class AppHandler
             path = "/System/Library/Fonts/AppleSDGothicNeo.ttc";
 
         if (path != null && File.Exists(path))
-            io.Fonts.AddFontFromFileTTF(path, 18f, null, io.Fonts.GetGlyphRangesDefault());
+            io.Fonts.AddFontFromFileTTF(path, FontSize, null, io.Fonts.GetGlyphRangesDefault());
     }
 
     private void OnClosing()
@@ -176,7 +213,7 @@ class AppHandler
             return;
         }
 
-        bool hasMethod = settings.data.Commands.TryGetValue(split[0], out string? method);
+        bool hasMethod = App.Data.Commands.TryGetValue(split[0], out string? method);
 
         if (!hasMethod || !commandFunction.TryGetValue(method!, out var action)) 
             return;
@@ -191,7 +228,53 @@ class AppHandler
         var video = await YoutubeIdExtractor.ResolveVideoId(context.Args);
         if (video is null) return;
 
-        videoQueue.AddLast(video.Value);
+        videoQueue.AddLast(video.Value);//Todo : messageTime에 맞춰 정렬되게 수정
+    }
+
+    private void OnVideoEnded()
+    {
+        if (videoQueue.Count > 0)
+        {
+            videoPlayer.LoadVideo(videoQueue.First!.Value.id);
+            videoQueue.RemoveFirst();
+            return;
+        }
+
+        if (autoList.Count > 0)
+            videoPlayer.LoadVideo(PickFromAutoList());
+    }
+
+    private string PickFromAutoList()
+    {
+        if (autoList.Count == 1)
+        {
+            autoList[0].Plays++;
+
+            return autoList[0].Video.id;
+        }
+
+        int a = Random.Shared.Next(autoList.Count);
+        int b = Random.Shared.Next(autoList.Count - 1);
+        if (b >= a)
+            b++;
+
+        int play = b;
+
+        if (autoList[a].Plays < autoList[b].Plays)
+            play = a;
+
+        autoList[play].Plays++;
+
+        return autoList[play].Video.id;
+    }
+
+    private async Task AddToAutoListAsync(string input)
+    {
+        var video = await YoutubeIdExtractor.ResolveVideoId(input);
+        if (video is null)
+            return;
+
+        autoList.Add(new(video.Value));
     }
 
     #region ImGui
@@ -212,8 +295,6 @@ class AppHandler
         ImGui.EndMainMenuBar();
     }
 
-    const float animationTime = 1f;
-
     private void RenderMainView()
     {
         ImGuiViewportPtr viewport = ImGui.GetMainViewport();
@@ -228,7 +309,7 @@ class AppHandler
             | ImGuiWindowFlags.NoBringToFrontOnFocus 
             | ImGuiWindowFlags.NoNavFocus);
 
-        int dotCount = (int)(ImGui.GetTime() * animationTime) % 4;
+        int dotCount = (int)(ImGui.GetTime() * AnimationSpeed) % 4;
         string dots = new string('.', dotCount);
 
 
@@ -240,6 +321,8 @@ class AppHandler
             ConnectionState.Disconnecting => $"Disconnecting{dots}",
             _ => throw new NotImplementedException()
         };
+
+        ImGui.BeginGroup();
 
         ImGui.BeginDisabled(chatReader.State == ConnectionState.Disconnecting);
         if (ImGui.Button($"{label}##ChatService"))
@@ -260,25 +343,48 @@ class AppHandler
         }
         ImGui.EndDisabled();
         
+        float availX = ImGui.GetContentRegionAvail().X;
+        float queueWidth = MathF.Min(ListMaxWidth, availX);
+        bool sideBySide = availX - queueWidth - ImGui.GetStyle().ItemSpacing.X >= AutoListSideBySideThreshold;
+
         RenderQueueTab();
+
+        ImGui.EndGroup();
+
+        if (sideBySide) 
+            ImGui.SameLine();
+
+        RenderAutoListTab();
 
         ImGui.End();
     }
 
+    /*
+     * 여기부터 TextEllipsisWithTooltip 사이 나중에 재대로 검토하기.
+     * 바이브코딩으로 대충 구현해두고 재대로 검토 안해둠. 비효율적인 흐름이 있을 가능성이 너무 큼.
+     * 
+     *
+     */
+
     private void RenderQueueTab()
     {
-        ImGui.BeginChild("QueueList", new Vector2(500, 300), ImGuiChildFlags.Borders);
+        float width = MathF.Min(ListMaxWidth, ImGui.GetContentRegionAvail().X);
+        ImGui.BeginChild("QueueList", new Vector2(width, ListHeight), ImGuiChildFlags.Borders);
 
         LinkedListNode<VideoData>? toRemove = null;
         for (var node = videoQueue.First; node != null; node = node.Next)
         {
             ImGui.PushID(RuntimeHelpers.GetHashCode(node));
-            ImGui.BeginChild("item", new Vector2(0, 60), ImGuiChildFlags.Borders);
+            ImGui.BeginChild("item", new Vector2(0, VideoItemHeight), ImGuiChildFlags.Borders);
 
             var video = node.Value;
 
             ImGui.BeginGroup();
-            ImGui.TextUnformatted(string.IsNullOrEmpty(video.title) ? video.id : video.title);
+
+            Vector2 textSize = ImGui.CalcTextSize(video.title);
+
+
+            TextEllipsisWithTooltip(video.title);
             ImGui.TextUnformatted(video.DurationString());
             ImGui.EndGroup();
 
@@ -298,15 +404,100 @@ class AppHandler
         if (toRemove != null) videoQueue.Remove(toRemove);
     }
 
+    private void RenderAutoListTab()
+    {
+        ImGui.BeginGroup();
+
+        float width = MathF.Min(ListMaxWidth, ImGui.GetContentRegionAvail().X);
+        float addBtnWidth = ImGui.CalcTextSize("Add").X + ImGui.GetStyle().FramePadding.X * 2;
+
+        ImGui.SetNextItemWidth(width - addBtnWidth - ImGui.GetStyle().ItemSpacing.X);
+        bool enter = ImGui.InputText("##AutoListInput", ref autoListInput, AutoListInputBufferSize, ImGuiInputTextFlags.EnterReturnsTrue);
+        ImGui.SameLine();
+        if ((enter || ImGui.Button("Add")) && !string.IsNullOrWhiteSpace(autoListInput))
+        {
+            _ = AddToAutoListAsync(autoListInput.Trim());
+            autoListInput = string.Empty;
+        }
+
+        ImGui.BeginChild("AutoList", new Vector2(width, ListHeight), ImGuiChildFlags.Borders);
+
+        int toRemove = -1;
+        for (int i = 0; i < autoList.Count; i++)
+        {
+            ImGui.PushID(i);
+            ImGui.BeginChild("item", new Vector2(0, VideoItemHeight), ImGuiChildFlags.Borders);
+
+            ImGui.BeginGroup();
+            TextEllipsisWithTooltip(autoList[i].Video.title);
+            ImGui.EndGroup();
+
+            ImGui.SameLine();
+            float btnWidth = ImGui.CalcTextSize("Remove").X + ImGui.GetStyle().FramePadding.X * 2;
+            float btnHeight = ImGui.GetContentRegionAvail().Y;
+            ImGui.SetCursorPosX(ImGui.GetWindowWidth() - btnWidth - ImGui.GetStyle().WindowPadding.X);
+            if (ImGui.Button("Remove", new Vector2(btnWidth, btnHeight))) toRemove = i;
+
+            ImGui.EndChild();
+            ImGui.PopID();
+        }
+
+        ImGui.EndChild();
+
+        if (toRemove >= 0)
+            autoList.RemoveAt(toRemove);
+
+        ImGui.EndGroup();
+    }
+
+    static void TextEllipsisWithTooltip(string text)
+    {
+        float width = ImGui.GetContentRegionAvail().X;
+        string displayText = text;
+
+        Vector2 textSize = ImGui.CalcTextSize(text);
+
+        if (textSize.X > width)
+        {
+            const string ellipsis = "...";
+            float ellipsisWidth = ImGui.CalcTextSize(ellipsis).X;
+
+            int length = text.Length;
+
+            while (length > 0)
+            {
+                string candidate = text[..length];
+                float candidateWidth = ImGui.CalcTextSize(candidate).X;
+
+                if (candidateWidth + ellipsisWidth <= width)
+                {
+                    displayText = candidate + ellipsis;
+                    break;
+                }
+
+                length--;
+            }
+        }
+
+        ImGui.TextUnformatted(displayText);
+
+        if (ImGui.IsItemHovered() && displayText != text)
+        {
+            ImGui.BeginTooltip();
+            ImGui.TextUnformatted(text);
+            ImGui.EndTooltip();
+        }
+    }
+
     private void RenderChatTestWindow()
     {
-        if (!settings.isTest) return;
+        if (!isTest) return;
 
-        ImGui.SetNextWindowSize(new Vector2(400, 120), ImGuiCond.FirstUseEver);
+        ImGui.SetNextWindowSize(new Vector2(ChatTestWindowWidth, ChatTestWindowHeight), ImGuiCond.FirstUseEver);
         ImGui.Begin("Chat Test", ImGuiWindowFlags.None);
 
-        ImGui.SetNextItemWidth(300);
-        bool enter = ImGui.InputText("##vchat", ref virtualChatInput, 256, ImGuiInputTextFlags.EnterReturnsTrue);
+        ImGui.SetNextItemWidth(ChatTestInputWidth);
+        bool enter = ImGui.InputText("##vchat", ref virtualChatInput, VirtualChatBufferSize, ImGuiInputTextFlags.EnterReturnsTrue);
         if (enter) ImGui.SetKeyboardFocusHere(-1);
         ImGui.SameLine();
         if ((enter || ImGui.Button("Send")) && !string.IsNullOrWhiteSpace(virtualChatInput))
@@ -322,32 +513,106 @@ class AppHandler
     {
         if (!showSettings) return;
 
-        ImGui.SetNextWindowSize(new Vector2(400, 320), ImGuiCond.FirstUseEver);
+        ImGui.SetNextWindowSize(new Vector2(SettingsWindowWidth, SettingsWindowHeight), ImGuiCond.FirstUseEver);
 
         if (ImGui.Begin("Settings", ref showSettings))
         {
+            ImGui.Text("Chat Test");
+            ImGui.SameLine();
+            ImGui.Checkbox("##ChatTest", ref isTest);
+
+            ImGui.Spacing();
+            ImGui.Separator();
+
             bool changed = false;
             ImGui.BeginDisabled(chatReader.State != ConnectionState.Disconnected);
 
             ImGui.Text("Chzzk Client Id");
-            changed |= ImGui.InputText("##Id", ref settings.data.ClientId, 128);
+            changed |= ImGui.InputText("##Id", ref App.Data.ClientId, CredentialBufferSize);
             ImGui.Text("Chzzk Client Secret");
-            changed |= ImGui.InputText("##Secret", ref settings.data.ClientSecret, 128, ImGuiInputTextFlags.Password);
+            changed |= ImGui.InputText("##Secret", ref App.Data.ClientSecret, CredentialBufferSize, ImGuiInputTextFlags.Password);
 
             ImGui.EndDisabled();
 
             ImGui.Spacing();
             ImGui.Separator();
 
-            ImGui.Text("Chat Test");
-            ImGui.SameLine();
-            ImGui.Checkbox("##ChatTest", ref settings.isTest);
+            ImGui.Text("Custom Commands");
 
-            if (changed) settings.Save();
+            changed |= RenderCommandsChild();
 
+            if (changed) AppRecord.Save(App.Data);
         }
 
         ImGui.End();
+    }
+
+    private bool RenderCommandsChild()
+    {
+        bool changed = false;
+        string[] funcKeys = commandFunction.Keys.ToArray();
+
+        ImGui.SetNextItemWidth(TriggerColumnWidth);
+        ImGui.InputText("##NewTrigger", ref newCmdTrigger, NewTriggerBufferSize);
+        ImGui.SameLine();
+        ImGui.SetNextItemWidth(FuncComboWidth);
+        ImGui.Combo("##NewFunc", ref newCmdFuncIndex, funcKeys, funcKeys.Length);
+        ImGui.SameLine();
+
+        bool canAdd = !string.IsNullOrWhiteSpace(newCmdTrigger) && funcKeys.Length > 0;
+        ImGui.BeginDisabled(!canAdd);
+        if (ImGui.Button("Add") && canAdd)
+        {
+            App.Data.Commands[newCmdTrigger.Trim()] = funcKeys[newCmdFuncIndex];
+            newCmdTrigger = string.Empty;
+            changed = true;
+        }
+        ImGui.EndDisabled();
+
+        ImGui.BeginChild("CommandList", new Vector2(0, CommandListHeight), ImGuiChildFlags.Borders);
+
+        string? toRemove = null;
+        foreach (var (trigger, funcName) in App.Data.Commands)
+        {
+            ImGui.PushID(trigger);
+            ImGui.BeginChild("item", new Vector2(0, CommandItemHeight), ImGuiChildFlags.Borders);
+
+            float btnWidth = ImGui.CalcTextSize("X").X + ImGui.GetStyle().FramePadding.X * 2;
+            float removeX = ImGui.GetWindowWidth() - btnWidth - ImGui.GetStyle().WindowPadding.X;
+
+            ImGui.TextUnformatted(trigger);
+
+            var dl = ImGui.GetWindowDrawList();
+            var wp = ImGui.GetWindowPos();
+            dl.AddLine(
+                new Vector2(wp.X + TriggerColumnWidth, wp.Y),
+                new Vector2(wp.X + TriggerColumnWidth, wp.Y + ImGui.GetWindowHeight()),
+                ImGui.GetColorU32(ImGuiCol.Separator)
+            );
+
+            ImGui.SameLine();
+            ImGui.SetCursorPosX(TriggerColumnWidth + ImGui.GetStyle().ItemSpacing.X);
+            ImGui.TextUnformatted(funcName);
+
+            ImGui.SameLine();
+            ImGui.SetCursorPosX(removeX);
+
+            if (ImGui.SmallButton("X")) 
+                toRemove = trigger;
+
+            ImGui.EndChild();
+            ImGui.PopID();
+        }
+
+        ImGui.EndChild();
+
+        if (toRemove != null)
+        {
+            App.Data.Commands.Remove(toRemove);
+            changed = true;
+        }
+
+        return changed;
     }
 
     #endregion ImGui

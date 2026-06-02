@@ -1,19 +1,18 @@
 using ChzzkApi_CS.Extensions;
 using Microsoft.Extensions.DependencyInjection;
 using SDL3;
+using System.Windows;
 
 namespace ChTubePlayer;
 
 internal static class Program
 {
-    public static readonly IServiceProvider Services;
-
-    static Program()
-    {
-        var services = new ServiceCollection();
-        services.AddChzzkApiClient();
-        Services = services.BuildServiceProvider();
-    }
+    private const int DefaultMainWindowWidth  = 1280;
+    private const int DefaultMainWindowHeight = 720;
+    private const int DefaultVideoWindowWidth  = 640;
+    private const int DefaultVideoWindowHeight = 360;
+    private const int MinWindowWidth  = 200;
+    private const int MinWindowHeight = 75;
 
     [System.STAThread]
     static void Main(string[] args)
@@ -32,11 +31,13 @@ internal static class Program
         SDL.GLSetAttribute(SDL.GLAttr.DepthSize, 24);
         SDL.GLSetAttribute(SDL.GLAttr.StencilSize, 8);
 
-        var mainWindow  = new AppWindow("Glitzk",  1280, 720,
+        var mainWindow  = new AppWindow("Glitzk",  DefaultMainWindowWidth, DefaultMainWindowHeight,
             SDL.WindowFlags.OpenGL | SDL.WindowFlags.Resizable | SDL.WindowFlags.Hidden);
 
-        var videoWindow = new AppWindow("YouTubePlayer", 640, 360,
+        var videoWindow = new AppWindow("YouTubePlayer", DefaultVideoWindowWidth, DefaultVideoWindowHeight,
             SDL.WindowFlags.Resizable);
+
+        SDL.SetWindowMinimumSize(mainWindow.Handle, MinWindowWidth, MinWindowHeight);
 
         SDL.SetWindowParent(videoWindow.Handle, mainWindow.Handle);
 
