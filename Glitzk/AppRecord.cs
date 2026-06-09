@@ -70,7 +70,7 @@ public static class AppRecord
             Commands = new Dictionary<string, string>
             {
                 ["!sr"] = "Song Request",
-                ["!노래"] = "Song Request",
+                ["!ㄴㄱ"] = "Song Request",
             };
 
             AutoList = new List<AutoVideo>();

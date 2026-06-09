@@ -52,6 +52,8 @@ class ChzzkChatReader : IDisposable
 
         State = ConnectionState.Connecting;
 
+        ClientApi.SetCredentials(App.Data.ClientId, App.Data.ClientSecret);
+
         try
         {
             if (UserApi is null)
@@ -163,7 +165,12 @@ class ChzzkChatReader : IDisposable
             return;
 
         pendingEchoes.Add(message);
-        await UserApi.PostChatMessageAsync(message);
+        var response = await UserApi.PostChatMessageAsync(message);
+        Console.WriteLine(response.Code);
+        if (response.Code == ChzzkStatusCode.Forbidden)
+        {
+            ConnectionFailed?.Invoke(response.Message!);
+        }
     }
 
     public void Dispose() => Disconnect();
