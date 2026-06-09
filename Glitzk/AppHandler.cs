@@ -1,12 +1,10 @@
 using ChTubePlayer.Services;
-using ChzzkApi_CS;
 using ChzzkApi_CS.Session;
 using Hexa.NET.ImGui;
 using Hexa.NET.ImGui.Backends.OpenGL3;
 using Hexa.NET.ImGui.Backends.SDL3;
 using Hexa.NET.OpenGL;
 using HexaGen.Runtime;
-using Microsoft.Extensions.DependencyInjection;
 using SDL3;
 using System.IO;
 using System.Numerics;
@@ -60,6 +58,8 @@ class AppHandler
 
     private readonly Dictionary<string, Action<CommandContext>> commandFunction = new();
 
+    private string? pendingErrorMessage;
+
     private bool isTest = false;
     private bool showSettings = false;
     private string virtualChatInput = string.Empty;
@@ -81,8 +81,9 @@ class AppHandler
         main.Closing += OnClosing;
         main.EventReceived += OnEvent;
 
-        chatReader = new(App.Services.GetRequiredService<ChzzkApi.Factory>().Create(string.Empty, string.Empty));
+        chatReader = new();
         chatReader.ChatReceived += (msg) => OnChatReceived(msg.Content, msg.SenderChannelId, msg.Profile.UserRoleCode, msg.MessageTime);
+        chatReader.ConnectionFailed += msg => pendingErrorMessage = msg;
 
         commandFunction["Song Request"] = HandleSongRequest;
     }
@@ -116,107 +117,6 @@ class AppHandler
 
         videoPlayer = VideoPlayerFactory.Create(video.Handle);
         videoPlayer.VideoEnd = OnVideoEnded;
-    }
-
-    private void OnUpdate(double dt)
-    {
-        if (videoQueue.Count > 0 && !videoPlayer.IsPlaying)
-            OnVideoEnded();
-
-        videoPlayer.Tick();
-
-        ImGuiImplOpenGL3.NewFrame();
-        ImGuiImplSDL3.NewFrame();
-        ImGui.NewFrame();
-
-        RenderMenuBar();
-        RenderMainView();
-        RenderSettingsWindow();
-        RenderChatTestWindow();
-    }
-
-    private void OnRender(double dt)
-    {
-        ImGui.Render();
-        ImGui.EndFrame();
-
-        gl!.Viewport(0, 0, (int)io.DisplaySize.X, (int)io.DisplaySize.Y);
-        gl.ClearColor(BackgroundBrightness, BackgroundBrightness, BackgroundBrightness, 0);
-        gl.Clear(GLClearBufferMask.ColorBufferBit);
-
-        ImGuiImplOpenGL3.RenderDrawData(ImGui.GetDrawData());
-
-        if ((io.ConfigFlags & ImGuiConfigFlags.ViewportsEnable) != 0)
-        {
-            ImGui.UpdatePlatformWindows();
-            ImGui.RenderPlatformWindowsDefault();
-        }
-
-        gl.MakeCurrent();
-        SDL.GLSwapWindow(main.Handle);
-    }
-
-    private unsafe void OnEvent(SDL.Event e)
-    {
-        ImGuiImplSDL3.ProcessEvent(new SDLEventPtr((SDLEvent*)&e));
-
-        if ((SDL.EventType)e.Type == SDL.EventType.WindowResized &&
-            e.Window.WindowID == video.WindowId)
-        {
-            videoPlayer.SetBounds(0, 0, e.Window.Data1, e.Window.Data2);
-        }
-    }
-
-    private unsafe void LoadFont()
-    {
-        string? path = null;
-
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-            path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Fonts), "malgun.ttf");
-        else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-            path = "/System/Library/Fonts/AppleSDGothicNeo.ttc";
-
-        if (path != null && File.Exists(path))
-            io.Fonts.AddFontFromFileTTF(path, FontSize, null, io.Fonts.GetGlyphRangesDefault());
-    }
-
-    private void OnClosing()
-    {
-        videoPlayer.Dispose();
-        ImGuiImplOpenGL3.Shutdown();
-        ImGuiImplSDL3.Shutdown();
-        ImGui.DestroyContext();
-        gl?.Dispose();
-        SDL.GLDestroyContext(glContext);
-    }
-
-    #endregion Lifecycle
-
-    private void OnChatReceived(string content, string senderId, UserRoleCode role, long messageTime)
-    {
-        string[] split = content.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
-
-        if (split.Length < 2)
-        {
-            return;
-        }
-
-        bool hasMethod = App.Data.Commands.TryGetValue(split[0], out string? method);
-
-        if (!hasMethod || !commandFunction.TryGetValue(method!, out var action)) 
-            return;
-
-        action(new CommandContext(senderId, role, split[1], messageTime));
-    }
-
-    private void HandleSongRequest(CommandContext context) => _ = EnqueueVideoAsync(context);
-
-    private async Task EnqueueVideoAsync(CommandContext context)
-    {
-        var video = await YoutubeIdExtractor.ResolveVideoId(context.Args);
-        if (video is null) return;
-
-        videoQueue.AddLast(video.Value);//Todo : messageTime에 맞춰 정렬되게 수정
     }
 
     private void OnVideoEnded()
@@ -265,6 +165,109 @@ class AppHandler
 
         App.Data.AutoList.Add(new(video.Value));
         AppRecord.Save(App.Data);
+    }
+
+    private void OnUpdate(double dt)
+    {
+        if (videoQueue.Count > 0 && !videoPlayer.IsPlaying)
+            OnVideoEnded();
+
+        videoPlayer.Tick();
+
+        ImGuiImplOpenGL3.NewFrame();
+        ImGuiImplSDL3.NewFrame();
+        ImGui.NewFrame();
+
+        RenderMenuBar();
+        RenderMainView();
+        RenderSettingsWindow();
+        RenderChatTestWindow();
+        RenderErrorPopup();
+    }
+
+    private void OnRender(double dt)
+    {
+        ImGui.Render();
+        ImGui.EndFrame();
+
+        gl!.Viewport(0, 0, (int)io.DisplaySize.X, (int)io.DisplaySize.Y);
+        gl.ClearColor(BackgroundBrightness, BackgroundBrightness, BackgroundBrightness, 0);
+        gl.Clear(GLClearBufferMask.ColorBufferBit);
+
+        ImGuiImplOpenGL3.RenderDrawData(ImGui.GetDrawData());
+
+        if ((io.ConfigFlags & ImGuiConfigFlags.ViewportsEnable) != 0)
+        {
+            ImGui.UpdatePlatformWindows();
+            ImGui.RenderPlatformWindowsDefault();
+        }
+
+        gl.MakeCurrent();
+        SDL.GLSwapWindow(main.Handle);
+    }
+
+    private unsafe void OnEvent(SDL.Event e)
+    {
+        ImGuiImplSDL3.ProcessEvent(new SDLEventPtr((SDLEvent*)&e));
+
+        if ((SDL.EventType)e.Type == SDL.EventType.WindowResized &&
+            e.Window.WindowID == video.WindowId)
+        {
+            videoPlayer.SetBounds(0, 0, e.Window.Data1, e.Window.Data2);
+        }
+    }
+
+    private unsafe void LoadFont()
+    {
+        string? path = null;
+
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Fonts), "malgun.ttf");
+        else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            path = "/System/Library/Fonts/AppleSDGothicNeo.ttc";
+
+        if (path != null && File.Exists(path))
+            io.Fonts.AddFontFromFileTTF(path, FontSize);
+    }
+
+    private void OnClosing()
+    {
+        videoPlayer.Dispose();
+        ImGuiImplOpenGL3.Shutdown();
+        ImGuiImplSDL3.Shutdown();
+        ImGui.DestroyContext();
+        gl?.Dispose();
+        SDL.GLDestroyContext(glContext);
+    }
+
+    #endregion Lifecycle
+
+    private void OnChatReceived(string content, string senderId, UserRoleCode role, long messageTime)
+    {
+        string[] split = content.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
+
+        if (split.Length < 2)
+        {
+            return;
+        }
+
+        bool hasMethod = App.Data.Commands.TryGetValue(split[0], out string? method);
+
+        if (!hasMethod || !commandFunction.TryGetValue(method!, out var action)) 
+            return;
+
+        action(new CommandContext(senderId, role, split[1], messageTime));
+    }
+
+    private void HandleSongRequest(CommandContext context) => _ = EnqueueVideoAsync(context);
+
+    private async Task EnqueueVideoAsync(CommandContext context)
+    {
+        var video = await YoutubeIdExtractor.ResolveVideoId(context.Args);
+        if (video is null) return;
+
+        videoQueue.AddLast(video.Value);//Todo : messageTime에 맞춰 정렬되게 수정
+        await chatReader.PostChatAsync($"신청이 완료되었습니다 : {video.Value.title}");
     }
 
     #region ImGui
@@ -349,13 +352,6 @@ class AppHandler
         ImGui.End();
     }
 
-    /*
-     * 여기부터 TextEllipsisWithTooltip 사이 나중에 재대로 검토하기.
-     * 바이브코딩으로 대충 구현해두고 재대로 검토 안해둠. 비효율적인 흐름이 있을 가능성이 너무 큼.
-     * 
-     *
-     */
-
     private void RenderQueueTab()
     {
         float width = MathF.Min(ListMaxWidth, ImGui.GetContentRegionAvail().X);
@@ -371,18 +367,20 @@ class AppHandler
 
             ImGui.BeginGroup();
 
-            Vector2 textSize = ImGui.CalcTextSize(video.title);
+            float btnWidth = ImGui.CalcTextSize("Remove").X + ImGui.GetStyle().FramePadding.X * 2;
+            float spacing = ImGui.GetStyle().ItemSpacing.X;
 
 
-            TextEllipsisWithTooltip(video.title);
+            TextEllipsisWithTooltip(video.title, ImGui.GetContentRegionAvail().X - btnWidth - spacing);
             ImGui.TextUnformatted(video.DurationString());
             ImGui.EndGroup();
 
             ImGui.SameLine();
-            float btnWidth = ImGui.CalcTextSize("Remove").X + ImGui.GetStyle().FramePadding.X * 2;
             float btnHeight = ImGui.GetContentRegionAvail().Y;
             ImGui.SetCursorPosX(ImGui.GetWindowWidth() - btnWidth - ImGui.GetStyle().WindowPadding.X);
-            if (ImGui.Button("Remove", new Vector2(btnWidth, btnHeight))) toRemove = node;
+
+            if (ImGui.Button("Remove", new Vector2(btnWidth, btnHeight)))
+                toRemove = node;
 
 
             ImGui.EndChild();
@@ -419,12 +417,12 @@ class AppHandler
             ImGui.PushID(i);
             ImGui.BeginChild("item", new Vector2(0, VideoItemHeight), ImGuiChildFlags.Borders);
 
-            ImGui.BeginGroup();
-            TextEllipsisWithTooltip(autoList[i].Video.title);
-            ImGui.EndGroup();
+            float btnWidth = ImGui.CalcTextSize("Remove").X + ImGui.GetStyle().FramePadding.X * 2;
+            float spacing = ImGui.GetStyle().ItemSpacing.X;
+
+            TextEllipsisWithTooltip(autoList[i].Video.title, ImGui.GetContentRegionAvail().X - btnWidth - spacing);
 
             ImGui.SameLine();
-            float btnWidth = ImGui.CalcTextSize("Remove").X + ImGui.GetStyle().FramePadding.X * 2;
             float btnHeight = ImGui.GetContentRegionAvail().Y;
             ImGui.SetCursorPosX(ImGui.GetWindowWidth() - btnWidth - ImGui.GetStyle().WindowPadding.X);
             if (ImGui.Button("Remove", new Vector2(btnWidth, btnHeight))) toRemove = i;
@@ -444,33 +442,37 @@ class AppHandler
         ImGui.EndGroup();
     }
 
-    static void TextEllipsisWithTooltip(string text)
+    static void TextEllipsisWithTooltip(string text, float size)
     {
-        float width = ImGui.GetContentRegionAvail().X;
         string displayText = text;
 
-        Vector2 textSize = ImGui.CalcTextSize(text);
-
-        if (textSize.X > width)
+        if (ImGui.CalcTextSize(text).X > size)
         {
             const string ellipsis = "...";
             float ellipsisWidth = ImGui.CalcTextSize(ellipsis).X;
 
-            int length = text.Length;
+            int left = 0;
+            int right = text.Length;
+            int best = 0;
 
-            while (length > 0)
+            while (left <= right)
             {
-                string candidate = text[..length];
-                float candidateWidth = ImGui.CalcTextSize(candidate).X;
+                int mid = (left + right) / 2;
 
-                if (candidateWidth + ellipsisWidth <= width)
+                string candidate = text[..mid];
+                float width = ImGui.CalcTextSize(candidate).X;
+
+                if (width + ellipsisWidth <= size)
                 {
-                    displayText = candidate + ellipsis;
-                    break;
+                    best = mid;
+                    left = mid + 1;
                 }
-
-                length--;
+                else
+                {
+                    right = mid - 1;
+                }
             }
+            displayText = text[..best] + ellipsis;
         }
 
         ImGui.TextUnformatted(displayText);
@@ -607,6 +609,26 @@ class AppHandler
         }
 
         return changed;
+    }
+
+    private void RenderErrorPopup()
+    {
+        if (pendingErrorMessage == null)
+            return;
+
+        ImGui.OpenPopup("Connection Error");
+
+        if (ImGui.BeginPopupModal("Connection Error", ImGuiWindowFlags.NoResize))
+        {
+            ImGui.TextWrapped(pendingErrorMessage ?? string.Empty);
+            ImGui.Spacing();
+            if (ImGui.Button("OK", new Vector2(-1, 0)))
+            {
+                pendingErrorMessage = null;
+                ImGui.CloseCurrentPopup();
+            }
+            ImGui.EndPopup();
+        }
     }
 
     #endregion ImGui
