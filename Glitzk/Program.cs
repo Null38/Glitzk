@@ -1,7 +1,4 @@
-using ChzzkApi_CS.Extensions;
-using Microsoft.Extensions.DependencyInjection;
 using SDL3;
-using System.Windows;
 
 namespace ChTubePlayer;
 

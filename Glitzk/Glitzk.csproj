@@ -16,9 +16,14 @@
     <PackageReference Include="Hexa.NET.ImGui.Backends" Version="1.0.18" />
     <PackageReference Include="Hexa.NET.ImGui.Backends.SDL3" Version="1.0.18" />
     <PackageReference Include="Hexa.NET.OpenGL3" Version="1.1.0" />
-    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3912.50" />
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4129.50" />
     <PackageReference Include="SDL3-CS" Version="3.4.2" />
-    <PackageReference Include="SDL3-CS.Native" Version="3.4.2" />
+    <PackageReference Include="SDL3-CS.Windows" Version="3.4.14.1" />
   </ItemGroup>
-
+  
+  <Target Name="GenerateThirdPartyNotices" AfterTargets="Build" Condition="'$(Configuration)' == 'Release'">
+    <Exec Command="dotnet tool restore" WorkingDirectory="$(MSBuildProjectDirectory)" />
+    <Exec Command="dotnet nuget-license -i &quot;$(MSBuildProjectFullPath)&quot; -t -d &quot;$(OutDir)licenses&quot; -o Table -fo &quot;$(OutDir)THIRD-PARTY-NOTICES.txt&quot;" WorkingDirectory="$(MSBuildProjectDirectory)" />
+  </Target>
+  
 </Project>

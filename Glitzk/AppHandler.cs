@@ -54,7 +54,7 @@ class AppHandler
     ChzzkChatReader chatReader;
     private CancellationTokenSource? connectCts;
 
-    private LinkedList<VideoData> videoQueue = new();
+    private LinkedList<VideoInfo> videoQueue = new();
 
     private readonly Dictionary<string, Action<CommandContext>> commandFunction = new();
 
@@ -357,7 +357,7 @@ class AppHandler
         float width = MathF.Min(ListMaxWidth, ImGui.GetContentRegionAvail().X);
         ImGui.BeginChild("QueueList", new Vector2(width, ListHeight), ImGuiChildFlags.Borders);
 
-        LinkedListNode<VideoData>? toRemove = null;
+        LinkedListNode<VideoInfo>? toRemove = null;
         for (var node = videoQueue.First; node != null; node = node.Next)
         {
             ImGui.PushID(RuntimeHelpers.GetHashCode(node));

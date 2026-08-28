@@ -1,26 +1,25 @@
 using System.Net.Http;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 
 namespace ChTubePlayer.Services;
-public struct VideoData
+public struct VideoInfo
 {
     public string title;
     public string id;
-    public int durationSeconds;
+    public TimeSpan duration;
 
-    public VideoData(string title, string id, int durationSeconds)
+    public VideoInfo(string title, string id, TimeSpan duration)
     {
         this.title = title;
         this.id = id;
-        this.durationSeconds = durationSeconds;
+        this.duration = duration;
     }
 
     public string DurationString()
     {
-        int h = durationSeconds / 3600;
-        int m = (durationSeconds % 3600) / 60;
-        int s = durationSeconds % 60;
-        return h > 0 ? $"{h}:{m:D2}:{s:D2}" : $"{m}:{s:D2}";
+        string hours = duration.Hours == 0 ? string.Empty : $"{duration.Hours}:";
+        return $"{hours}{duration.Minutes:D2}:{duration.Seconds:D2}";
     }
 }
 
@@ -36,7 +35,7 @@ public static class YoutubeIdExtractor
         @"/watch\?v=([a-zA-Z0-9_-]{11})",
         RegexOptions.Compiled);
 
-    public static async Task<VideoData?> ResolveVideoId(string input)
+    public static async Task<VideoInfo?> ResolveVideoId(string input)
     {
         if (string.IsNullOrWhiteSpace(input))
             return null;
@@ -49,7 +48,7 @@ public static class YoutubeIdExtractor
         if (videoId == null)
             return null;
 
-        return await CheckVideoExists(videoId);
+        return await GetVideoInfoAsync(videoId);
     }
 
     private static string? ExtractVideoId(string url)
@@ -81,7 +80,7 @@ public static class YoutubeIdExtractor
         }
     }
 
-    private static async Task<VideoData?> CheckVideoExists(string videoId)
+    private static async Task<VideoInfo?> GetVideoInfoAsync(string videoId, CancellationToken ct = default)
     {
         try
         {
@@ -100,10 +99,10 @@ public static class YoutubeIdExtractor
             var titleMatch = Regex.Match(html, @"""title"":""([^""]+)""");
             var durationMatch = Regex.Match(html, @"""lengthSeconds"":""(\d+)""");
 
-            string title = titleMatch.Success ? titleMatch.Groups[1].Value : string.Empty;
+            string title = titleMatch.Success ? JsonSerializer.Deserialize<string>(titleMatch.Groups[1].Value)! : string.Empty;
             int durSec = durationMatch.Success && int.TryParse(durationMatch.Groups[1].Value, out int d) ? d : 0;
 
-            return new(title, videoId, durSec);
+            return new(title, videoId, new TimeSpan(0, 0, durSec));
         }
         catch (HttpRequestException)
         {

@@ -1,9 +1,7 @@
 using ChzzkApi_CS;
 using ChzzkApi_CS.Session;
 using Microsoft.Extensions.DependencyInjection;
-using System.Diagnostics;
 using System.Net.Http;
-using System.Runtime.InteropServices;
 
 namespace ChTubePlayer.Services;
 
@@ -15,7 +13,6 @@ public enum ConnectionState
     Disconnecting
 }
 
-// ChzzkApi_CS 변경 이후 임시 적용 상태. 전체 흐름 재점검 필요.
 class ChzzkChatReader : IDisposable
 {
     IHttpClientFactory httpClientFactory;
@@ -108,7 +105,7 @@ class ChzzkChatReader : IDisposable
     async Task RunOAuthFlowAsync(CancellationToken ct = default)
     {
         var authUri = ClientApi.GetAuthorizationUri(RedirectUri, out string state);
-        OpenUrl(authUri);
+        SDL3.SDL.OpenURL(authUri);
 
         var code = await ChzzkClientApi.WaitForAuthorizationCodeAsync(RedirectUri, state, ct: ct);
 
@@ -174,23 +171,4 @@ class ChzzkChatReader : IDisposable
     }
 
     public void Dispose() => Disconnect();
-
-    static void OpenUrl(string url)
-    {
-        try
-        {
-            Process.Start(new ProcessStartInfo { FileName = url, UseShellExecute = true });
-        }
-        catch
-        {
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-                Process.Start(new ProcessStartInfo("cmd", $"/c start {url.Replace("&", "^&")}") { CreateNoWindow = true });
-            else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
-                Process.Start("xdg-open", url);
-            else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-                Process.Start("open", url);
-            else
-                throw;
-        }
-    }
 }

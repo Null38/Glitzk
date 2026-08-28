@@ -9,12 +9,12 @@ public record class AutoVideo
 {
     public AutoVideo() { Video = default; }
 
-    public AutoVideo(VideoData video)
+    public AutoVideo(VideoInfo video)
     {
         Video = video;
     }
 
-    public VideoData Video { get; set; }
+    public VideoInfo Video { get; set; }
 
     [XmlIgnore]
     public int Plays { get; set; } = 0;
