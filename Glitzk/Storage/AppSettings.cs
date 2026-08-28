@@ -3,7 +3,7 @@ using System.Xml.Serialization;
 
 namespace ChTubePlayer.Storage;
 
-// Root name is pinned to keep existing program.setting files readable.
+// Root name is pinned to keep existing program.
 [XmlRoot("SaveData")]
 public sealed class AppSettings
 {
@@ -13,7 +13,7 @@ public sealed class AppSettings
     public string? AccessToken;
     public string? RefreshToken;
 
-    public List<PlaylistEntry> AutoList;
+    public List<PlaylistEntry> AutoPlayList;
 
     [XmlIgnore]
     public Dictionary<string, string> Commands;
@@ -27,7 +27,10 @@ public sealed class AppSettings
         set
         {
             Commands = new Dictionary<string, string>();
-            if (value == null) return;
+
+            if (value == null) 
+                return;
+
             foreach (var command in value)
                 Commands[command.Key] = command.Value;
         }
@@ -55,6 +58,6 @@ public sealed class AppSettings
             ["!ㄴㄱ"] = "Song Request",
         };
 
-        AutoList = new List<PlaylistEntry>();
+        AutoPlayList = new List<PlaylistEntry>();
     }
 }

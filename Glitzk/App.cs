@@ -13,9 +13,8 @@ internal static class App
     {
         var services = new ServiceCollection();
         services.AddChzzkApiClient();
-        services.AddSingleton<ISettingsStore, XmlSettingsStore>();
+        services.AddSingleton<SettingsStore>();
         services.AddSingleton<SettingsService>();
-        services.AddSingleton<ChzzkChatReader>();
         Services = services.BuildServiceProvider();
     }
 }

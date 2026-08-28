@@ -1,6 +1,7 @@
 using ChTubePlayer.Storage;
 using ChzzkApi_CS;
 using ChzzkApi_CS.Session;
+using Microsoft.Extensions.DependencyInjection;
 using System.Net.Http;
 
 namespace ChTubePlayer.Services;
@@ -29,9 +30,9 @@ class ChzzkChatReader : IDisposable
     private ChzzkSession? session;
     private readonly HashSet<string> pendingEchoes = new();
 
-    public ChzzkChatReader(IHttpClientFactory httpClientFactory, SettingsService settings)
+    public ChzzkChatReader(SettingsService settings)
     {
-        this.httpClientFactory = httpClientFactory;
+        httpClientFactory = App.Services.GetRequiredService<IHttpClientFactory>();
         this.settings = settings;
 
         var saved = settings.Current;

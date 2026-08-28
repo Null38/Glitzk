@@ -42,9 +42,8 @@ internal static class Program
         SDL.SetWindowParent(videoWindow.Handle, mainWindow.Handle);
 
         var settings = App.Services.GetRequiredService<SettingsService>();
-        var chatReader = App.Services.GetRequiredService<ChzzkChatReader>();
 
-        var handler = new AppHandler(mainWindow, videoWindow, settings, chatReader);
+        var handler = new AppHandler(mainWindow, videoWindow, settings);
 
         mainWindow.Run();
 

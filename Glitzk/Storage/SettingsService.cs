@@ -4,9 +4,9 @@ namespace ChTubePlayer.Storage;
 
 public sealed class SettingsService
 {
-    private readonly ISettingsStore store;
+    private readonly SettingsStore store;
 
-    public SettingsService(ISettingsStore store)
+    public SettingsService(SettingsStore store)
     {
         this.store = store;
         Current = store.Load();
@@ -25,13 +25,13 @@ public sealed class SettingsService
 
     public void AddPlaylistEntry(VideoInfo video)
     {
-        Current.AutoList.Add(new PlaylistEntry(video));
+        Current.AutoPlayList.Add(new PlaylistEntry(video));
         Save();
     }
 
     public void RemovePlaylistEntryAt(int index)
     {
-        Current.AutoList.RemoveAt(index);
+        Current.AutoPlayList.RemoveAt(index);
         Save();
     }
 

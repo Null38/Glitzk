@@ -72,12 +72,12 @@ class AppHandler
     private readonly AppWindow main;
     private readonly AppWindow video;
 
-    public AppHandler(AppWindow main, AppWindow video, SettingsService settings, ChzzkChatReader chatReader)
+    public AppHandler(AppWindow main, AppWindow video, SettingsService settings)
     {
         this.main  = main;
         this.video = video;
         this.settings = settings;
-        this.chatReader = chatReader;
+        chatReader = new(settings);
 
         main.Load += OnLoad;
         main.Update += OnUpdate;
@@ -131,13 +131,13 @@ class AppHandler
             return;
         }
 
-        if (settings.Current.AutoList.Count > 0)
+        if (settings.Current.AutoPlayList.Count > 0)
             videoPlayer.LoadVideo(PickFromAutoList());
     }
 
     private string PickFromAutoList()
     {
-        var list = settings.Current.AutoList;
+        var list = settings.Current.AutoPlayList;
 
         if (list.Count == 1)
         {
@@ -412,7 +412,7 @@ class AppHandler
 
         ImGui.BeginChild("AutoList", new Vector2(width, ListHeight), ImGuiChildFlags.Borders);
 
-        var autoList = settings.Current.AutoList;
+        var autoList = settings.Current.AutoPlayList;
         int toRemove = -1;
         for (int i = 0; i < autoList.Count; i++)
         {
