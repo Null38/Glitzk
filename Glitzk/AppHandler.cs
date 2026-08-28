@@ -1,4 +1,5 @@
 using ChTubePlayer.Services;
+using ChTubePlayer.Storage;
 using ChzzkApi_CS.Session;
 using Hexa.NET.ImGui;
 using Hexa.NET.ImGui.Backends.OpenGL3;
@@ -51,7 +52,8 @@ class AppHandler
     private ImGuiIOPtr io;
 
     private IVideoPlayer videoPlayer = new NullVideoPlayer();
-    ChzzkChatReader chatReader;
+    private readonly ChzzkChatReader chatReader;
+    private readonly SettingsService settings;
     private CancellationTokenSource? connectCts;
 
     private LinkedList<VideoInfo> videoQueue = new();
@@ -70,10 +72,12 @@ class AppHandler
     private readonly AppWindow main;
     private readonly AppWindow video;
 
-    public AppHandler(AppWindow main, AppWindow video)
+    public AppHandler(AppWindow main, AppWindow video, SettingsService settings, ChzzkChatReader chatReader)
     {
         this.main  = main;
         this.video = video;
+        this.settings = settings;
+        this.chatReader = chatReader;
 
         main.Load += OnLoad;
         main.Update += OnUpdate;
@@ -81,7 +85,6 @@ class AppHandler
         main.Closing += OnClosing;
         main.EventReceived += OnEvent;
 
-        chatReader = new();
         chatReader.ChatReceived += (msg) => OnChatReceived(msg.Content, msg.SenderChannelId, msg.Profile.UserRoleCode, msg.MessageTime);
         chatReader.ConnectionFailed += msg => pendingErrorMessage = msg;
 
@@ -128,13 +131,13 @@ class AppHandler
             return;
         }
 
-        if (App.Data.AutoList.Count > 0)
+        if (settings.Current.AutoList.Count > 0)
             videoPlayer.LoadVideo(PickFromAutoList());
     }
 
     private string PickFromAutoList()
     {
-        var list = App.Data.AutoList;
+        var list = settings.Current.AutoList;
 
         if (list.Count == 1)
         {
@@ -163,8 +166,7 @@ class AppHandler
         if (video is null)
             return;
 
-        App.Data.AutoList.Add(new(video.Value));
-        AppRecord.Save(App.Data);
+        settings.AddPlaylistEntry(video.Value);
     }
 
     private void OnUpdate(double dt)
@@ -251,7 +253,7 @@ class AppHandler
             return;
         }
 
-        bool hasMethod = App.Data.Commands.TryGetValue(split[0], out string? method);
+        bool hasMethod = settings.Current.Commands.TryGetValue(split[0], out string? method);
 
         if (!hasMethod || !commandFunction.TryGetValue(method!, out var action)) 
             return;
@@ -410,7 +412,7 @@ class AppHandler
 
         ImGui.BeginChild("AutoList", new Vector2(width, ListHeight), ImGuiChildFlags.Borders);
 
-        var autoList = App.Data.AutoList;
+        var autoList = settings.Current.AutoList;
         int toRemove = -1;
         for (int i = 0; i < autoList.Count; i++)
         {
@@ -434,10 +436,7 @@ class AppHandler
         ImGui.EndChild();
 
         if (toRemove >= 0)
-        {
-            autoList.RemoveAt(toRemove);
-            AppRecord.Save(App.Data);
-        }
+            settings.RemovePlaylistEntryAt(toRemove);
 
         ImGui.EndGroup();
     }
@@ -524,28 +523,27 @@ class AppHandler
             ImGui.BeginDisabled(chatReader.State != ConnectionState.Disconnected);
 
             ImGui.Text("Chzzk Client Id");
-            changed |= ImGui.InputText("##Id", ref App.Data.ClientId, CredentialBufferSize);
+            changed |= ImGui.InputText("##Id", ref settings.Current.ClientId, CredentialBufferSize);
             ImGui.Text("Chzzk Client Secret");
-            changed |= ImGui.InputText("##Secret", ref App.Data.ClientSecret, CredentialBufferSize, ImGuiInputTextFlags.Password);
+            changed |= ImGui.InputText("##Secret", ref settings.Current.ClientSecret, CredentialBufferSize, ImGuiInputTextFlags.Password);
 
             ImGui.EndDisabled();
+
+            if (changed) settings.Save();
 
             ImGui.Spacing();
             ImGui.Separator();
 
             ImGui.Text("Custom Commands");
 
-            changed |= RenderCommandsChild();
-
-            if (changed) AppRecord.Save(App.Data);
+            RenderCommandsChild();
         }
 
         ImGui.End();
     }
 
-    private bool RenderCommandsChild()
+    private void RenderCommandsChild()
     {
-        bool changed = false;
         string[] funcKeys = commandFunction.Keys.ToArray();
 
         ImGui.SetNextItemWidth(TriggerColumnWidth);
@@ -559,16 +557,15 @@ class AppHandler
         ImGui.BeginDisabled(!canAdd);
         if (ImGui.Button("Add") && canAdd)
         {
-            App.Data.Commands[newCmdTrigger.Trim()] = funcKeys[newCmdFuncIndex];
+            settings.SetCommand(newCmdTrigger.Trim(), funcKeys[newCmdFuncIndex]);
             newCmdTrigger = string.Empty;
-            changed = true;
         }
         ImGui.EndDisabled();
 
         ImGui.BeginChild("CommandList", new Vector2(0, CommandListHeight), ImGuiChildFlags.Borders);
 
         string? toRemove = null;
-        foreach (var (trigger, funcName) in App.Data.Commands)
+        foreach (var (trigger, funcName) in settings.Current.Commands)
         {
             ImGui.PushID(trigger);
             ImGui.BeginChild("item", new Vector2(0, CommandItemHeight), ImGuiChildFlags.Borders);
@@ -603,12 +600,7 @@ class AppHandler
         ImGui.EndChild();
 
         if (toRemove != null)
-        {
-            App.Data.Commands.Remove(toRemove);
-            changed = true;
-        }
-
-        return changed;
+            settings.RemoveCommand(toRemove);
     }
 
     private void RenderErrorPopup()

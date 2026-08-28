@@ -1,6 +1,6 @@
+using ChTubePlayer.Storage;
 using ChzzkApi_CS;
 using ChzzkApi_CS.Session;
-using Microsoft.Extensions.DependencyInjection;
 using System.Net.Http;
 
 namespace ChTubePlayer.Services;
@@ -15,7 +15,8 @@ public enum ConnectionState
 
 class ChzzkChatReader : IDisposable
 {
-    IHttpClientFactory httpClientFactory;
+    private readonly IHttpClientFactory httpClientFactory;
+    private readonly SettingsService settings;
 
     public ConnectionState State { get; private set; } = ConnectionState.Disconnected;
     public event Action<ChatMessage>? ChatReceived;
@@ -28,17 +29,20 @@ class ChzzkChatReader : IDisposable
     private ChzzkSession? session;
     private readonly HashSet<string> pendingEchoes = new();
 
-    public ChzzkChatReader()
+    public ChzzkChatReader(IHttpClientFactory httpClientFactory, SettingsService settings)
     {
-        httpClientFactory = App.Services.GetRequiredService<IHttpClientFactory>();
+        this.httpClientFactory = httpClientFactory;
+        this.settings = settings;
+
+        var saved = settings.Current;
 
         ClientApi = new ChzzkClientApi(
             httpClientFactory.CreateClient(nameof(ChzzkClientApi)),
-            App.Data.ClientId,
-            App.Data.ClientSecret);
+            saved.ClientId,
+            saved.ClientSecret);
 
-        if (!string.IsNullOrEmpty(App.Data.AccessToken) && !string.IsNullOrEmpty(App.Data.RefreshToken))
-            UserApi = new ChzzkUserApi(ClientApi, App.Data.AccessToken, App.Data.RefreshToken);
+        if (!string.IsNullOrEmpty(saved.AccessToken) && !string.IsNullOrEmpty(saved.RefreshToken))
+            UserApi = new ChzzkUserApi(ClientApi, saved.AccessToken, saved.RefreshToken);
     }
 
 
@@ -49,7 +53,7 @@ class ChzzkChatReader : IDisposable
 
         State = ConnectionState.Connecting;
 
-        ClientApi.SetCredentials(App.Data.ClientId, App.Data.ClientSecret);
+        ClientApi.SetCredentials(settings.Current.ClientId, settings.Current.ClientSecret);
 
         try
         {
@@ -112,9 +116,7 @@ class ChzzkChatReader : IDisposable
         UserApi = await ClientApi.IssueAccessTokenAsync(
             httpClientFactory.CreateClient(nameof(ChzzkUserApi)), code, state);
 
-        App.Data.AccessToken = UserApi.AccessToken;
-        App.Data.RefreshToken = UserApi.RefreshToken;
-        AppRecord.Save(App.Data);
+        settings.SetTokens(UserApi.AccessToken, UserApi.RefreshToken);
     }
 
     private async Task<T> ExecuteWithAuthenticationAsync<T>(Func<Task<T>> apiCall)
@@ -131,9 +133,7 @@ class ChzzkChatReader : IDisposable
 
         if (refreshed.Code == ChzzkStatusCode.Success)
         {
-            App.Data.AccessToken = UserApi!.AccessToken;
-            App.Data.RefreshToken = UserApi!.RefreshToken;
-            AppRecord.Save(App.Data);
+            settings.SetTokens(UserApi!.AccessToken, UserApi!.RefreshToken);
 
             return await apiCall();
         }

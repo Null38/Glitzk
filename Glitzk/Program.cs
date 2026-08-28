@@ -1,3 +1,6 @@
+using ChTubePlayer.Services;
+using ChTubePlayer.Storage;
+using Microsoft.Extensions.DependencyInjection;
 using SDL3;
 
 namespace ChTubePlayer;
@@ -38,7 +41,10 @@ internal static class Program
 
         SDL.SetWindowParent(videoWindow.Handle, mainWindow.Handle);
 
-        var handler = new AppHandler(mainWindow, videoWindow);
+        var settings = App.Services.GetRequiredService<SettingsService>();
+        var chatReader = App.Services.GetRequiredService<ChzzkChatReader>();
+
+        var handler = new AppHandler(mainWindow, videoWindow, settings, chatReader);
 
         mainWindow.Run();
 
