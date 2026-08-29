@@ -1,3 +1,4 @@
+using ChTubePlayer.Services;
 using ChzzkApi_CS.Extensions;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -14,6 +15,10 @@ internal static class App
 
         var services = new ServiceCollection();
         services.AddChzzkApiClient();
+        services.AddHttpClient(
+            YoutubeVideoResolver.HttpClientName,
+            client => client.BaseAddress = new Uri(YoutubeVideoResolver.InnerTubeBaseUrl));
+
         Services = services.BuildServiceProvider();
     }
 }
