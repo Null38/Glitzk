@@ -162,7 +162,7 @@ class AppHandler
 
     private async Task AddToAutoListAsync(string input)
     {
-        var video = await YoutubeIdExtractor.ResolveVideoId(input);
+        var video = await YoutubeVideoResolver.ResolveVideoAsync(input);
         if (video is null)
             return;
 
@@ -265,7 +265,7 @@ class AppHandler
 
     private async Task EnqueueVideoAsync(CommandContext context)
     {
-        var video = await YoutubeIdExtractor.ResolveVideoId(context.Args);
+        var video = await YoutubeVideoResolver.ResolveVideoAsync(context.Args);
         if (video is null) return;
 
         videoQueue.AddLast(video.Value);//Todo : messageTime에 맞춰 정렬되게 수정

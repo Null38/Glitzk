@@ -15,6 +15,10 @@ internal static class App
         services.AddChzzkApiClient();
         services.AddSingleton<SettingsStore>();
         services.AddSingleton<SettingsService>();
+        services.AddHttpClient(
+            YoutubeVideoResolver.HttpClientName,
+            client => client.BaseAddress = new Uri(YoutubeVideoResolver.InnerTubeBaseUrl));
+
         Services = services.BuildServiceProvider();
     }
 }
