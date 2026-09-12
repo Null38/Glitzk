@@ -5,6 +5,9 @@ namespace ChTubePlayer.Storage;
 
 public sealed class SettingsStore
 {
+    public Action<Exception>? ExceptionHandler;
+
+
     private const string FileName = "program.setting";
 
     private static readonly XmlSerializer Serializer = new(typeof(AppSettings));
@@ -38,7 +41,7 @@ public sealed class SettingsStore
             }
             catch (Exception ex) when (ex is InvalidOperationException or IOException)
             {
-                Console.Error.WriteLine($"Failed to read {filePath}: {ex.Message}");
+                ExceptionHandler?.Invoke(ex);
             }
 
             TryBackupUnreadableFile();
@@ -50,8 +53,8 @@ public sealed class SettingsStore
     {
         lock (Gate)
         {
-            using (var writer = new StreamWriter(filePath))
-                Serializer.Serialize(writer, settings);
+            using var writer = new StreamWriter(filePath);
+            Serializer.Serialize(writer, settings);
         }
     }
 
@@ -63,7 +66,7 @@ public sealed class SettingsStore
         }
         catch (IOException ex)
         {
-            Console.Error.WriteLine($"Failed to back up {filePath}: {ex.Message}");
+            ExceptionHandler?.Invoke(ex);
         }
     }
 }

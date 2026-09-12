@@ -1,6 +1,7 @@
 using ChTubePlayer.Storage;
 using ChzzkApi_CS;
 using ChzzkApi_CS.Session;
+using Glitzk.Storage;
 using Microsoft.Extensions.DependencyInjection;
 using System.Net.Http;
 
@@ -21,14 +22,14 @@ class ChzzkChatReader : IDisposable
 
     public ConnectionState State { get; private set; } = ConnectionState.Disconnected;
     public event Action<ChatMessage>? ChatReceived;
-    public event Action<string>? ConnectionFailed;
+    public event Action<Exception, DateTimeOffset>? WriteLog;
 
     const string RedirectUri = "http://localhost:8080/api/path/";
 
-    private readonly ChzzkClientApi ClientApi;
-    private ChzzkUserApi? UserApi;
+    private readonly ChzzkClientApi clientApi;
+    private ChzzkUserApi? userApi;
     private ChzzkSession? session;
-    private readonly HashSet<string> pendingEchoes = new();
+    private readonly HashSet<string> pendingEchoes = [];
 
     public ChzzkChatReader(SettingsService settings)
     {
@@ -37,15 +38,14 @@ class ChzzkChatReader : IDisposable
 
         var saved = settings.Current;
 
-        ClientApi = new ChzzkClientApi(
-            httpClientFactory.CreateClient(nameof(ChzzkClientApi)),
+        clientApi = new ChzzkClientApi(
+            httpClientFactory,
             saved.ClientId,
             saved.ClientSecret);
 
         if (!string.IsNullOrEmpty(saved.AccessToken) && !string.IsNullOrEmpty(saved.RefreshToken))
-            UserApi = new ChzzkUserApi(ClientApi, saved.AccessToken, saved.RefreshToken);
+            userApi = new ChzzkUserApi(clientApi, saved.AccessToken, saved.RefreshToken);
     }
-
 
     public async Task ConnectAsync(CancellationToken ct = default)
     {
@@ -54,18 +54,20 @@ class ChzzkChatReader : IDisposable
 
         State = ConnectionState.Connecting;
 
-        ClientApi.SetCredentials(settings.Current.ClientId, settings.Current.ClientSecret);
+        clientApi.SetCredentials(settings.Current.ClientId, settings.Current.ClientSecret);
 
         try
         {
-            if (UserApi is null)
+            if (userApi is null)
                 await RunOAuthFlowAsync(ct);
 
             ct.ThrowIfCancellationRequested();
 
-            await ExecuteWithAuthenticationAsync(() => UserApi!.GetSessionListAsync());//For Access Token Verification
+            await ExecuteWithAuthenticationAsync(() => userApi!.GetSessionListAsync());//For Access Token Verification
 
-            session = await UserApi!.CreateSessionAsync();
+            session = await userApi!.CreateSessionAsync(ct);
+
+            session.Exceptions.SetExceptionOccurred((info) => WriteLog?.Invoke(info.Exception, info.TimeUtc));
 
             session.ChatReceived += msg =>
             {
@@ -74,11 +76,11 @@ class ChzzkChatReader : IDisposable
 
                 ChatReceived?.Invoke(msg);
             };
-            await session.ConnectAsync();
+            await session.ConnectAsync(ct);
 
             ct.ThrowIfCancellationRequested();
 
-            var res = await ExecuteWithAuthenticationAsync(() => session.SubscribeEventAsync(UserApi!, EventType.Chat));
+            var res = await ExecuteWithAuthenticationAsync(() => session.SubscribeEventAsync(userApi!, EventType.Chat));
 
             if (res.Code != ChzzkStatusCode.Success)
                 throw new ChzzkApiException(res);
@@ -102,22 +104,20 @@ class ChzzkChatReader : IDisposable
                 session = null;
             }
             State = ConnectionState.Disconnected;
-            int bracket = ex.Message.IndexOf("] ");
-            ConnectionFailed?.Invoke(bracket >= 0 ? ex.Message[(bracket + 2)..] : ex.Message);
+            WriteLog?.Invoke(ex, DateTimeOffset.UtcNow);
         }
     }
 
     async Task RunOAuthFlowAsync(CancellationToken ct = default)
     {
-        var authUri = ClientApi.GetAuthorizationUri(RedirectUri, out string state);
+        var authUri = clientApi.GetAuthorizationUri(RedirectUri, out string state);
         SDL3.SDL.OpenURL(authUri);
 
         var code = await ChzzkClientApi.WaitForAuthorizationCodeAsync(RedirectUri, state, ct: ct);
 
-        UserApi = await ClientApi.IssueAccessTokenAsync(
-            httpClientFactory.CreateClient(nameof(ChzzkUserApi)), code, state);
+        userApi = await clientApi.IssueAccessTokenAsync(code, state, ct);
 
-        settings.SetTokens(UserApi.AccessToken, UserApi.RefreshToken);
+        settings.SetTokens(userApi.AccessToken, userApi.RefreshToken);
     }
 
     private async Task<T> ExecuteWithAuthenticationAsync<T>(Func<Task<T>> apiCall)
@@ -130,11 +130,11 @@ class ChzzkChatReader : IDisposable
         if (response.Code != ChzzkStatusCode.Unauthorized)
             throw new ChzzkApiException(response);
 
-        var refreshed = await UserApi!.RefreshAccessTokenAsync();
+        var refreshed = await userApi!.RefreshAccessTokenAsync();
 
         if (refreshed.Code == ChzzkStatusCode.Success)
         {
-            settings.SetTokens(UserApi!.AccessToken, UserApi!.RefreshToken);
+            settings.SetTokens(userApi!.AccessToken, userApi!.RefreshToken);
 
             return await apiCall();
         }
@@ -148,9 +148,9 @@ class ChzzkChatReader : IDisposable
     public void Disconnect()
     {
         State = ConnectionState.Disconnecting;
-        if (session is not null && UserApi is not null)
+        if (session is not null && userApi is not null)
         {
-            session.UnsubscribeEventAsync(UserApi, EventType.Chat).Wait();
+            session.UnsubscribeEventAsync(userApi, EventType.Chat).Wait();
             session.DisposeAsync().AsTask().Wait();
             session = null;
         }
@@ -159,15 +159,23 @@ class ChzzkChatReader : IDisposable
 
     public async Task PostChatAsync(string message)
     {
-        if (UserApi is null || State != ConnectionState.Connected) 
+        if (userApi is null || State != ConnectionState.Connected) 
             return;
 
         pendingEchoes.Add(message);
-        var response = await UserApi.PostChatMessageAsync(message);
-        Console.WriteLine(response.Code);
-        if (response.Code == ChzzkStatusCode.Forbidden)
+
+        var response = await ExecuteWithAuthenticationAsync(() => userApi.PostChatMessageAsync(message));
+
+        if (response.Code != ChzzkStatusCode.Success)
         {
-            ConnectionFailed?.Invoke(response.Message!);
+            try
+            {
+                throw new ChzzkApiException(response);
+            }
+            catch (ChzzkApiException ex)
+            {
+                WriteLog?.Invoke(ex, DateTimeOffset.UtcNow);
+            }
         }
     }
 

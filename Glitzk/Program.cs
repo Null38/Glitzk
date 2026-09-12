@@ -14,8 +14,10 @@ internal static class Program
     private const int MinWindowWidth  = 200;
     private const int MinWindowHeight = 75;
 
-    [System.STAThread]
+    [STAThread]
+#pragma warning disable IDE0060 // 사용하지 않는 매개 변수를 제거하세요.
     static void Main(string[] args)
+#pragma warning restore IDE0060 // 사용하지 않는 매개 변수를 제거하세요.
     {
         if (!SDL.Init(SDL.InitFlags.Video | SDL.InitFlags.Events))
         {
@@ -43,7 +45,7 @@ internal static class Program
 
         var settings = App.Services.GetRequiredService<SettingsService>();
 
-        var handler = new AppHandler(mainWindow, videoWindow, settings);
+        _ = new AppHandler(mainWindow, videoWindow, settings);
 
         mainWindow.Run();
 

@@ -1,3 +1,5 @@
+using Glitzk.Storage;
+using Microsoft.Extensions.DependencyInjection;
 using System.ComponentModel;
 using System.Xml.Serialization;
 
@@ -12,11 +14,20 @@ public sealed class AppSettings
     public string ClientSecret;
     public string? AccessToken;
     public string? RefreshToken;
+    public bool SaveLog
+    {
+        get => logWriter._isEnabled;
+        set => logWriter._isEnabled = value;
+    }
 
     public List<PlaylistEntry> AutoPlayList;
 
     [XmlIgnore]
     public Dictionary<string, string> Commands;
+
+
+    [XmlIgnore]
+    private LogWriter logWriter = App.Services.GetRequiredService<LogWriter>();
 
     [XmlArray("Commands")]
     [XmlArrayItem("Command")]
@@ -26,7 +37,7 @@ public sealed class AppSettings
         get => Commands.Select(pair => new Command { Key = pair.Key, Value = pair.Value }).ToArray();
         set
         {
-            Commands = new Dictionary<string, string>();
+            Commands = [];
 
             if (value == null) 
                 return;
@@ -51,6 +62,7 @@ public sealed class AppSettings
         ClientSecret = string.Empty;
         AccessToken = null;
         RefreshToken = null;
+        SaveLog = false;
 
         Commands = new Dictionary<string, string>
         {
@@ -58,6 +70,6 @@ public sealed class AppSettings
             ["!ㄴㄱ"] = "Song Request",
         };
 
-        AutoPlayList = new List<PlaylistEntry>();
+        AutoPlayList = [];
     }
 }

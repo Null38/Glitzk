@@ -1,11 +1,13 @@
 using ChTubePlayer.Services;
 using ChTubePlayer.Storage;
 using ChzzkApi_CS.Session;
+using Glitzk.Storage;
 using Hexa.NET.ImGui;
 using Hexa.NET.ImGui.Backends.OpenGL3;
 using Hexa.NET.ImGui.Backends.SDL3;
 using Hexa.NET.OpenGL;
 using HexaGen.Runtime;
+using Microsoft.Extensions.DependencyInjection;
 using SDL3;
 using System.IO;
 using System.Numerics;
@@ -56,11 +58,9 @@ class AppHandler
     private readonly SettingsService settings;
     private CancellationTokenSource? connectCts;
 
-    private LinkedList<VideoInfo> videoQueue = new();
+    private readonly LinkedList<VideoInfo> videoQueue = new();
 
-    private readonly Dictionary<string, Action<CommandContext>> commandFunction = new();
-
-    private string? pendingErrorMessage;
+    private readonly Dictionary<string, Action<CommandContext>> commandFunction = [];
 
     private bool isTest = false;
     private bool showSettings = false;
@@ -86,7 +86,7 @@ class AppHandler
         main.EventReceived += OnEvent;
 
         chatReader.ChatReceived += (msg) => OnChatReceived(msg.Content, msg.SenderChannelId, msg.Profile.UserRoleCode, msg.MessageTime);
-        chatReader.ConnectionFailed += msg => pendingErrorMessage = msg;
+        chatReader.WriteLog += App.Services.GetRequiredService<LogWriter>().AppendLog;
 
         commandFunction["Song Request"] = HandleSongRequest;
     }
@@ -184,7 +184,6 @@ class AppHandler
         RenderMainView();
         RenderSettingsWindow();
         RenderChatTestWindow();
-        RenderErrorPopup();
     }
 
     private void OnRender(double dt)
@@ -299,21 +298,17 @@ class AppHandler
               ImGuiWindowFlags.NoTitleBar
             | ImGuiWindowFlags.NoResize
             | ImGuiWindowFlags.NoCollapse
-            | ImGuiWindowFlags.NoMove 
-            | ImGuiWindowFlags.NoBackground 
-            | ImGuiWindowFlags.NoBringToFrontOnFocus 
+            | ImGuiWindowFlags.NoMove
+            | ImGuiWindowFlags.NoBackground
+            | ImGuiWindowFlags.NoBringToFrontOnFocus
             | ImGuiWindowFlags.NoNavFocus);
-
-        int dotCount = (int)(ImGui.GetTime() * AnimationSpeed) % 4;
-        string dots = new string('.', dotCount);
-
 
         string label = chatReader.State switch
         {
             ConnectionState.Disconnected => "Connect",
-            ConnectionState.Connecting => $"Connecting{dots}",
+            ConnectionState.Connecting => $"Connecting{CreateDots()}",
             ConnectionState.Connected => "Disconnect",
-            ConnectionState.Disconnecting => $"Disconnecting{dots}",
+            ConnectionState.Disconnecting => $"Disconnecting{CreateDots()}",
             _ => throw new NotImplementedException()
         };
 
@@ -337,7 +332,7 @@ class AppHandler
             }
         }
         ImGui.EndDisabled();
-        
+
         float availX = ImGui.GetContentRegionAvail().X;
         float queueWidth = MathF.Min(ListMaxWidth, availX);
         bool sideBySide = availX - queueWidth - ImGui.GetStyle().ItemSpacing.X >= AutoListSideBySideThreshold;
@@ -346,12 +341,19 @@ class AppHandler
 
         ImGui.EndGroup();
 
-        if (sideBySide) 
+        if (sideBySide)
             ImGui.SameLine();
 
         RenderAutoListTab();
 
         ImGui.End();
+    }
+
+    private static string CreateDots()
+    {
+        int dotCount = (int)(ImGui.GetTime() * AnimationSpeed) % 4;
+        string dots = new('.', dotCount);
+        return dots;
     }
 
     private void RenderQueueTab()
@@ -512,14 +514,25 @@ class AppHandler
 
         if (ImGui.Begin("Settings", ref showSettings))
         {
+            bool changed = false;
             ImGui.Text("Chat Test");
             ImGui.SameLine();
             ImGui.Checkbox("##ChatTest", ref isTest);
 
+            ImGui.Text("Save Log File");
+            ImGui.SameLine();
+
+            bool saveLog = settings.Current.SaveLog;
+
+            if (ImGui.Checkbox("##log", ref saveLog))
+            {
+                settings.Current.SaveLog = saveLog;
+                changed = true;
+            }
+
             ImGui.Spacing();
             ImGui.Separator();
 
-            bool changed = false;
             ImGui.BeginDisabled(chatReader.State != ConnectionState.Disconnected);
 
             ImGui.Text("Chzzk Client Id");
@@ -601,26 +614,6 @@ class AppHandler
 
         if (toRemove != null)
             settings.RemoveCommand(toRemove);
-    }
-
-    private void RenderErrorPopup()
-    {
-        if (pendingErrorMessage == null)
-            return;
-
-        ImGui.OpenPopup("Connection Error");
-
-        if (ImGui.BeginPopupModal("Connection Error", ImGuiWindowFlags.NoResize))
-        {
-            ImGui.TextWrapped(pendingErrorMessage ?? string.Empty);
-            ImGui.Spacing();
-            if (ImGui.Button("OK", new Vector2(-1, 0)))
-            {
-                pendingErrorMessage = null;
-                ImGui.CloseCurrentPopup();
-            }
-            ImGui.EndPopup();
-        }
     }
 
     #endregion ImGui
