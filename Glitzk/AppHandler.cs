@@ -22,6 +22,11 @@ public record CommandContext(
     string Args,
     long MessageTime);
 
+public record VideoRequest(
+    VideoInfo Video,
+    CommandContext Context);
+
+
 class AppHandler
 {
     private const float BackgroundBrightness = 25 / 255f;
@@ -58,7 +63,7 @@ class AppHandler
     private readonly SettingsService settings;
     private CancellationTokenSource? connectCts;
 
-    private readonly LinkedList<VideoInfo> videoQueue = new();
+    private readonly LinkedList<VideoRequest> videoQueue = new();//TODO : 비디오 큐 스레드 안정성 해결하기.
 
     private readonly Dictionary<string, Action<CommandContext>> commandFunction = [];
 
@@ -126,7 +131,7 @@ class AppHandler
     {
         if (videoQueue.Count > 0)
         {
-            videoPlayer.LoadVideo(videoQueue.First!.Value.id);
+            videoPlayer.LoadVideo(videoQueue.First!.Value.Video.id);
             videoQueue.RemoveFirst();
             return;
         }
@@ -267,8 +272,22 @@ class AppHandler
         var video = await YoutubeVideoResolver.ResolveVideoAsync(context.Args);
         if (video is null) return;
 
-        videoQueue.AddLast(video.Value);//Todo : messageTime에 맞춰 정렬되게 수정
-        await chatReader.PostChatAsync($"신청이 완료되었습니다 : {video.Value.title}");
+        InsertByMessageTime(new(video.Value, context));
+        await chatReader.PostChatAsync(string.Format("신청이 완료되었습니다 : {0}", video.Value.title));//나중에 문구 커스텀 가능하게 하기 위해 format으로 변경
+    }
+
+    private void InsertByMessageTime(VideoRequest request)
+    {
+        for (var node = videoQueue.Last; node != null; node = node.Previous)
+        {
+            if (node.Value.Context.MessageTime > request.Context.MessageTime)
+                continue;
+
+            videoQueue.AddAfter(node, request);
+            return;
+        }
+
+        videoQueue.AddFirst(request);
     }
 
     #region ImGui
@@ -361,7 +380,7 @@ class AppHandler
         float width = MathF.Min(ListMaxWidth, ImGui.GetContentRegionAvail().X);
         ImGui.BeginChild("QueueList", new Vector2(width, ListHeight), ImGuiChildFlags.Borders);
 
-        LinkedListNode<VideoInfo>? toRemove = null;
+        LinkedListNode<VideoRequest>? toRemove = null;
         for (var node = videoQueue.First; node != null; node = node.Next)
         {
             ImGui.PushID(RuntimeHelpers.GetHashCode(node));
@@ -375,8 +394,8 @@ class AppHandler
             float spacing = ImGui.GetStyle().ItemSpacing.X;
 
 
-            TextEllipsisWithTooltip(video.title, ImGui.GetContentRegionAvail().X - btnWidth - spacing);
-            ImGui.TextUnformatted(video.DurationString());
+            TextEllipsisWithTooltip(video.Video.title, ImGui.GetContentRegionAvail().X - btnWidth - spacing);
+            ImGui.TextUnformatted(video.Video.DurationString());
             ImGui.EndGroup();
 
             ImGui.SameLine();
@@ -385,7 +404,7 @@ class AppHandler
 
             if (ImGui.Button("Remove", new Vector2(btnWidth, btnHeight)))
                 toRemove = node;
-
+            //TODO?.. 신청한 사람 닉도 띄울까?
 
             ImGui.EndChild();
             ImGui.PopID();

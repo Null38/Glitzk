@@ -27,7 +27,7 @@ public sealed class AppSettings
 
 
     [XmlIgnore]
-    private LogWriter logWriter = App.Services.GetRequiredService<LogWriter>();
+    private readonly LogWriter logWriter = App.Services.GetRequiredService<LogWriter>();
 
     [XmlArray("Commands")]
     [XmlArrayItem("Command")]
