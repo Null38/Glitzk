@@ -4,7 +4,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
-namespace ChTubePlayer.Services;
+namespace Glitzk.Services;
 public struct VideoInfo
 {
     public string title;

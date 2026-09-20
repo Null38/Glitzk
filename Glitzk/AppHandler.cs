@@ -1,7 +1,6 @@
-using ChTubePlayer.Services;
-using ChTubePlayer.Storage;
-using ChzzkApi_CS.Session;
+using Glitzk.Services;
 using Glitzk.Storage;
+using ChzzkApi_CS.Session;
 using Hexa.NET.ImGui;
 using Hexa.NET.ImGui.Backends.OpenGL3;
 using Hexa.NET.ImGui.Backends.SDL3;
@@ -14,7 +13,7 @@ using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
-namespace ChTubePlayer;
+namespace Glitzk;
 
 public record CommandContext(
     string SenderId,

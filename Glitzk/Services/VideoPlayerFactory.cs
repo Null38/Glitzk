@@ -1,7 +1,7 @@
 using SDL3;
 using System.Runtime.InteropServices;
 
-namespace ChTubePlayer.Services;
+namespace Glitzk.Services;
 
 static class VideoPlayerFactory
 {

@@ -1,7 +1,7 @@
-using ChTubePlayer.Services;
+using Glitzk.Services;
 using System.Xml.Serialization;
 
-namespace ChTubePlayer.Storage;
+namespace Glitzk.Storage;
 
 public record class PlaylistEntry
 {

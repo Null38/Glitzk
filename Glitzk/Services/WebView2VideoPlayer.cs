@@ -1,7 +1,7 @@
 using Microsoft.Web.WebView2.Core;
 using System.Drawing;
 
-namespace ChTubePlayer.Services;
+namespace Glitzk.Services;
 
 class WebView2VideoPlayer : IVideoPlayer
 {
@@ -22,8 +22,8 @@ class WebView2VideoPlayer : IVideoPlayer
     Action? VideoEnd { get; set; }
     Action? IVideoPlayer.VideoEnd { get => VideoEnd; set => VideoEnd = value; }
 
-    private const string VirtualOrigin = "https://chtubeplayer.local";
-    private const string PlayerUrl = "https://chtubeplayer.local/player.html";
+    private const string VirtualOrigin = "https://glitzk.local";
+    private const string PlayerUrl = "https://glitzk.local/player.html";
 
     private static readonly string ShellHtml = $@"<!DOCTYPE html>
 <html style='margin:0;padding:0;width:100%;height:100%;'>

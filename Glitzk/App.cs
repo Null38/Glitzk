@@ -1,10 +1,10 @@
-using ChTubePlayer.Services;
-using ChTubePlayer.Storage;
+using Glitzk.Services;
+using Glitzk.Storage;
 using ChzzkApi_CS.Extensions;
 using Glitzk.Storage;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace ChTubePlayer;
+namespace Glitzk;
 
 internal static class App
 {

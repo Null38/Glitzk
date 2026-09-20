@@ -1,5 +1,5 @@
 
-namespace ChTubePlayer.Services;
+namespace Glitzk.Services;
 
 class NullVideoPlayer : IVideoPlayer
 {

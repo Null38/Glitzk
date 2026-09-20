@@ -1,7 +1,7 @@
 using System.IO;
 using System.Xml.Serialization;
 
-namespace ChTubePlayer.Storage;
+namespace Glitzk.Storage;
 
 public sealed class SettingsStore
 {

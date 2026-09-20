@@ -2,8 +2,9 @@ using Glitzk.Storage;
 using Microsoft.Extensions.DependencyInjection;
 using System.ComponentModel;
 using System.Xml.Serialization;
+using Glitzk.Services;
 
-namespace ChTubePlayer.Storage;
+namespace Glitzk.Storage;
 
 // Root name is pinned to keep existing program.
 [XmlRoot("SaveData")]

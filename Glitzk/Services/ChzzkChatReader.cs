@@ -1,11 +1,11 @@
-using ChTubePlayer.Storage;
+using Glitzk.Storage;
 using ChzzkApi_CS;
 using ChzzkApi_CS.Session;
 using Glitzk.Storage;
 using Microsoft.Extensions.DependencyInjection;
 using System.Net.Http;
 
-namespace ChTubePlayer.Services;
+namespace Glitzk.Services;
 
 public enum ConnectionState
 {

@@ -1,9 +1,8 @@
-using ChTubePlayer.Services;
-using ChTubePlayer.Storage;
+using Glitzk.Storage;
 using Microsoft.Extensions.DependencyInjection;
 using SDL3;
 
-namespace ChTubePlayer;
+namespace Glitzk;
 
 internal static class Program
 {

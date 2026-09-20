@@ -1,4 +1,4 @@
-namespace ChTubePlayer.Services;
+namespace Glitzk.Services;
 
 interface IVideoPlayer : IDisposable
 {

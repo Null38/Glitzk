@@ -1,6 +1,6 @@
 using SDL3;
 
-namespace ChTubePlayer;
+namespace Glitzk;
 
 class AppWindow : IDisposable
 {
