@@ -5,7 +5,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 
 namespace Glitzk.Services;
-public struct VideoInfo
+/*public struct VideoInfo
 {
     public string title;
     public string id;
@@ -198,4 +198,4 @@ public static class YoutubeVideoResolver
 
         return false;
     }
-}
+}*/
