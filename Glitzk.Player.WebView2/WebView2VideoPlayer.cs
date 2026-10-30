@@ -5,7 +5,7 @@ using System.Text.Json;
 
 namespace Glitzk.Player.WebView2;
 
-public sealed class WebView2VideoPlayer : IVideoPlayer
+public class WebView2VideoPlayer : IVideoPlayer
 {
     private enum InitState { CreatingEnvironment, CreatingController, Created, Failed }
 

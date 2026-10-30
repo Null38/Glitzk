@@ -2,7 +2,7 @@ using System.Collections.Concurrent;
 
 namespace Glitzk;
 
-sealed class Inbox
+class Inbox
 {
     private readonly ConcurrentQueue<Action> queue = new();
 

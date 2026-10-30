@@ -1,9 +1,9 @@
 using HexaGen.Runtime;
 using SDL3;
 
-namespace Glitzk;
+namespace Glitzk.Platform;
 
-sealed class GlBindingsContext : IGLContext
+class GlBindingsContext : IGLContext
 {
     private readonly nint window, context;
     public GlBindingsContext(nint window, nint context) { this.window = window; this.context = context; }

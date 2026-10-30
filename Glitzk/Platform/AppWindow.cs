@@ -1,9 +1,9 @@
 using SDL3;
 using System.Drawing;
 
-namespace Glitzk;
+namespace Glitzk.Platform;
 
-sealed class AppWindow
+class AppWindow
 {
     public nint Handle { get; }
     public uint Id { get; }
