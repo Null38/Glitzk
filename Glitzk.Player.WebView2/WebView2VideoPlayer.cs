@@ -46,10 +46,7 @@ public sealed class WebView2VideoPlayer : IVideoPlayer
             }
 
             function onPlayerStateChange(e) {
-                if (e.data === YT.PlayerState.PLAYING)
-                    post({ type: 'playing', loadId: loadId });
-                else if (e.data === YT.PlayerState.ENDED)
-                    post({ type: 'ended', loadId: loadId });
+                post({ type: 'state', loadId: loadId, state: e.data });
             }
 
             setInterval(function () {
@@ -163,8 +160,15 @@ public sealed class WebView2VideoPlayer : IVideoPlayer
         PlayerEvent playerEvent = root.GetProperty("type").GetString() switch
         {
             "ready" => new PlayerReady(),
-            "playing" => new PlayerPlaying(LoadId()),
-            "ended" => new PlayerEnded(LoadId()),
+            "state" => new PlayerStateChanged(LoadId(), root.GetProperty("state").GetInt32() switch
+            {
+                -1 => PlaybackState.Unstarted,
+                0 => PlaybackState.Ended,
+                1 => PlaybackState.Playing,
+                2 => PlaybackState.Paused,
+                3 => PlaybackState.Buffering,
+                var state => throw new InvalidOperationException($"Unknown YouTube player state {state}"),
+            }),
             "progress" => new PlayerProgress(LoadId(),
                 root.GetProperty("position").GetDouble(), root.GetProperty("duration").GetDouble()),
             "error" => new PlayerError(LoadId(), $"YouTube player error {root.GetProperty("code").GetInt32()}"),

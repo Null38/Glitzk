@@ -34,6 +34,8 @@ class App : IDisposable
     private readonly IVideoPlayer player;
     private int loadId;
 
+    private readonly LinkedList<string> requests = new(["oucIenRenTY", "j5-TjI3bzvbCU4", "eTplxWaAD8o", "zb_0xMwJ6B8", "j5-TjI3bzvbCU4"]);
+
     private readonly nint glContext;
     private readonly GL gl;
     private readonly ImGuiIOPtr io;
@@ -99,8 +101,30 @@ class App : IDisposable
     {
         Console.WriteLine(e);
 
-        if (e is PlayerReady)
-            player.Load("jNQXAC9IVRw", ++loadId);
+        switch (e)
+        {
+            case PlayerReady:
+                PlayNext();
+                break;
+
+            case PlayerStateChanged { State: PlaybackState.Ended } ended when ended.LoadId == loadId:
+                PlayNext();
+                break;
+
+            case PlayerError error when error.LoadId == loadId:
+                PlayNext();
+                break;
+        }
+    }
+
+    private void PlayNext()
+    {
+        var node = requests.First;
+        if (node == null)
+            return;
+
+        requests.RemoveFirst();
+        player.Load(node.Value, ++loadId);
     }
 
     public void Run()
