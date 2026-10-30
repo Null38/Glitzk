@@ -1,5 +1,8 @@
+using ChzzkApi.Extensions;
 using Glitzk.Platform;
 using Glitzk.Player;
+using Glitzk.Services;
+using Glitzk.UI;
 #if WINDOWS
 using Glitzk.Player.WebView2;
 #endif
@@ -7,9 +10,9 @@ using Hexa.NET.ImGui;
 using Hexa.NET.ImGui.Backends.OpenGL3;
 using Hexa.NET.ImGui.Backends.SDL3;
 using Hexa.NET.OpenGL;
+using Microsoft.Extensions.DependencyInjection;
 using SDL3;
 using System.IO;
-using System.Runtime.InteropServices;
 
 namespace Glitzk;
 
@@ -31,11 +34,17 @@ class App : IDisposable
     private readonly AppWindow video;
 
     private readonly Inbox inbox = new();
+    private readonly ServiceProvider services;
+    private readonly ChatService chat;
+
+    private readonly SettingsPanel settings;
+    private readonly AlertPopup alerts = new();
 
     private readonly IVideoPlayer player;
     private int loadId;
+    private bool isIdle;
 
-    private readonly LinkedList<string> requests = new(["oucIenRenTY", "j5-TjI3bzvbCU4", "eTplxWaAD8o", "zb_0xMwJ6B8", "j5-TjI3bzvbCU4"]);
+    private readonly LinkedList<string> requests = new(["oucIenRenTY", "j5-TjI3bzvbCU4", "eTplxWaAD8o", "zb_0xMwJ6B8", "j5-TjI3bzvbCU4"]);//임시 테스트 요청
 
     private readonly nint glContext;
     private readonly GL gl;
@@ -86,6 +95,13 @@ class App : IDisposable
         player = CreatePlayer();
         SDL.GetWindowSizeInPixels(video.Handle, out int videoWidth, out int videoHeight);
         player.Resize(videoWidth, videoHeight);
+
+        var collection = new ServiceCollection();
+        collection.AddChzzkApiClient();
+        services = collection.BuildServiceProvider();
+
+        chat = new ChatService(services.GetRequiredService<IHttpClientFactory>(), inbox, OnChat, alerts.Show);
+        settings = new SettingsPanel(chat);
     }
 
     private IVideoPlayer CreatePlayer()
@@ -118,9 +134,27 @@ class App : IDisposable
         }
     }
 
+    private void OnChat(ChatMessage message)//임시형태
+    {
+        Console.WriteLine(message);
+
+        string[] parts = message.Content.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length < 2 || parts[0] != "!sr")
+            return;
+
+        if (!YoutubeVideoResolver.TryExtractVideoId(parts[1], out string? videoId))
+            return;
+
+        requests.AddLast(videoId);
+
+        if (isIdle)
+            PlayNext();
+    }
+
     private void PlayNext()
     {
         var node = requests.First;
+        isIdle = node == null;
         if (node == null)
             return;
 
@@ -162,11 +196,22 @@ class App : IDisposable
         }
     }
 
+    private static unsafe void ProcessImGuiEvent(SDL.Event e)
+    {
+        ImGuiImplSDL3.ProcessEvent(new SDLEventPtr((SDLEvent*)&e));
+    }
+
+    #region Draw
+
     private void DrawFrame()
     {
         ImGuiImplOpenGL3.NewFrame();
         ImGuiImplSDL3.NewFrame();
         ImGui.NewFrame();
+
+        DrawMenuBar();
+        DrawMainView();
+        settings.Draw();
 
         ImGui.Render();
         ImGui.EndFrame();
@@ -187,19 +232,68 @@ class App : IDisposable
         SDL.GLSwapWindow(main.Handle);
     }
 
-    private static unsafe void ProcessImGuiEvent(SDL.Event e)
+    private void DrawMenuBar()
     {
-        ImGuiImplSDL3.ProcessEvent(new SDLEventPtr((SDLEvent*)&e));
+        if (!ImGui.BeginMainMenuBar())
+            return;
+
+        if (ImGui.BeginMenu("Menu"))
+        {
+            if (ImGui.MenuItem("Settings"))
+                settings.Open();
+
+            ImGui.EndMenu();
+        }
+
+        ImGui.EndMainMenuBar();
     }
+
+    private void DrawMainView()
+    {
+        ImGuiViewportPtr viewport = ImGui.GetMainViewport();
+        ImGui.SetNextWindowPos(viewport.WorkPos);
+        ImGui.SetNextWindowSize(viewport.WorkSize);
+        ImGui.Begin("Main",
+              ImGuiWindowFlags.NoTitleBar
+            | ImGuiWindowFlags.NoResize
+            | ImGuiWindowFlags.NoCollapse
+            | ImGuiWindowFlags.NoMove
+            | ImGuiWindowFlags.NoBackground
+            | ImGuiWindowFlags.NoBringToFrontOnFocus
+            | ImGuiWindowFlags.NoNavFocus);
+
+        string label = chat.Status switch
+        {
+            ChatStatus.Disconnected => "Connect",
+            ChatStatus.Connecting => "Connecting...",
+            ChatStatus.Connected => "Disconnect",
+            _ => throw new NotImplementedException()
+        };
+
+        if (ImGui.Button($"{label}##ChatService"))
+        {
+            if (chat.Status == ChatStatus.Disconnected)
+                chat.Connect(settings.ClientId, settings.ClientSecret);
+            else
+                chat.Disconnect();
+        }
+
+        alerts.Draw();
+
+        ImGui.End();
+    }
+
+    #endregion Draw
 
     unsafe private void LoadFont()
     {
         string? path = null;
 
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-            path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Fonts), "malgun.ttf");
-        else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-            path = "/System/Library/Fonts/AppleSDGothicNeo.ttc";
+#if WINDOWS
+        path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Fonts), "malgun.ttf");
+#elif MACOS
+        path = "/System/Library/Fonts/AppleSDGothicNeo.ttc";
+#endif
 
         if (path != null && File.Exists(path))
             io.Fonts.AddFontFromFileTTF(path, FontSize);
@@ -207,6 +301,8 @@ class App : IDisposable
 
     public void Dispose()
     {
+        chat.Disconnect();
+        services.Dispose();
         player.Dispose();
 
         ImGuiImplOpenGL3.Shutdown();

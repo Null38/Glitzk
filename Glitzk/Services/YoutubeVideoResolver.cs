@@ -1,11 +1,13 @@
 using Microsoft.Extensions.DependencyInjection;
+using System.Diagnostics.CodeAnalysis;
 using System.Net.Http;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
 namespace Glitzk.Services;
-/*public struct VideoInfo
+/*
+public struct VideoInfo
 {
     public string title;
     public string id;
@@ -27,8 +29,9 @@ namespace Glitzk.Services;
         this.duration = duration;
     }
 }
+*/
 
-public static class YoutubeVideoResolver
+public static partial class YoutubeVideoResolver
 {
     internal const string HttpClientName = "innertube";
     internal const string InnerTubeBaseUrl = "https://www.youtube.com/youtubei/v1/";
@@ -38,10 +41,18 @@ public static class YoutubeVideoResolver
 
     private const string VideoOnlyFilterParams = "EgIQAQ==";
 
-    private static readonly Regex UrlPattern = new(
-        @"(?:youtube\.com/(?:watch\?(?:.*&)?v=|embed/|shorts/)|youtu\.be/)([a-zA-Z0-9_-]{11})",
-        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    [GeneratedRegex(@"(?:youtube\.com/(?:watch\?(?:.*&)?v=|embed/|shorts/)|youtu\.be/)([a-zA-Z0-9_-]{11})", RegexOptions.IgnoreCase)]
+    private static partial Regex UrlPattern();
 
+    public static bool TryExtractVideoId(string url, [NotNullWhen(true)] out string? videoId)
+    {
+        Match match = UrlPattern().Match(url);
+        videoId = match.Success ? match.Groups[1].Value : null;
+        return match.Success;
+    }
+
+
+    /*
     public static async Task<VideoInfo?> ResolveVideoAsync(string input, CancellationToken ct = default)
     {
         string? videoId = ExtractVideoId(input);
@@ -52,15 +63,6 @@ public static class YoutubeVideoResolver
             return null;
 
         return await GetVideoInfoAsync(videoId, ct);
-    }
-
-    private static string? ExtractVideoId(string url)
-    {
-        if (string.IsNullOrWhiteSpace(url))
-            return null;
-
-        Match match = UrlPattern.Match(url);
-        return match.Success ? match.Groups[1].Value : null;
     }
 
     private static async Task<string?> SearchVideoIdAsync(string keyword, CancellationToken ct = default)
@@ -198,4 +200,5 @@ public static class YoutubeVideoResolver
 
         return false;
     }
-}*/
+    */
+}
