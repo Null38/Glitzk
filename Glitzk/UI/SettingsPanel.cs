@@ -25,6 +25,8 @@ class SettingsPanel(ChatService chat)
         {
             ImGui.BeginDisabled(chat.Status != ChatStatus.Disconnected);
 
+            // Todo: 여기에 치지직 개발자 센터 여는 OpenUrl()두기
+
             ImGui.Text("Chzzk Client Id");
             ImGui.InputText("##Client ID", ref clientId, CredentialBufferSize);
 

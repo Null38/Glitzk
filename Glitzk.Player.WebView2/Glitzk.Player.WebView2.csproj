@@ -14,4 +14,10 @@
     <ProjectReference Include="..\Glitzk.Player\Glitzk.Player.csproj" />
   </ItemGroup>
 
+  <Target Name="RemoveWebView2WpfReference" BeforeTargets="ResolveAssemblyReferences">
+    <ItemGroup>
+      <Reference Remove="@(Reference)" Condition="'%(Filename)' == 'Microsoft.Web.WebView2.Wpf'" />
+    </ItemGroup>
+  </Target>
+
 </Project>

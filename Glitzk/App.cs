@@ -36,6 +36,7 @@ class App : IDisposable
     private readonly Inbox inbox = new();
     private readonly ServiceProvider services;
     private readonly ChatService chat;
+    private readonly VideoResolver resolver;
 
     private readonly SettingsPanel settings;
     private readonly AlertPopup alerts = new();
@@ -98,9 +99,14 @@ class App : IDisposable
 
         var collection = new ServiceCollection();
         collection.AddChzzkApiClient();
+        collection.AddHttpClient(
+            VideoResolver.HttpClientName,
+            client => client.BaseAddress = new Uri(VideoResolver.InnerTubeBaseUrl));
         services = collection.BuildServiceProvider();
 
-        chat = new ChatService(services.GetRequiredService<IHttpClientFactory>(), inbox, OnChat, alerts.Show);
+        var httpClientFactory = services.GetRequiredService<IHttpClientFactory>();
+        chat = new ChatService(httpClientFactory, inbox, OnChat, alerts.Show);
+        resolver = new VideoResolver(httpClientFactory);
         settings = new SettingsPanel(chat);
     }
 
@@ -142,13 +148,31 @@ class App : IDisposable
         if (parts.Length < 2 || parts[0] != "!sr")
             return;
 
-        if (!YoutubeVideoResolver.TryExtractVideoId(parts[1], out string? videoId))
-            return;
+        _ = RequestAsync(parts[1]);
+    }
 
-        requests.AddLast(videoId);
+    private async Task RequestAsync(string input)//임시형태
+    {
+        try
+        {
+            VideoInfo? info = await resolver.ResolveAsync(input, CancellationToken.None);
+            inbox.Post(() =>
+            {
+                Console.WriteLine(info);
 
-        if (isIdle)
-            PlayNext();
+                if (info == null)
+                    return;
+
+                requests.AddLast(info.Id);
+
+                if (isIdle)
+                    PlayNext();
+            });
+        }
+        catch (Exception ex)
+        {
+            inbox.Post(() => alerts.Show(ex.Message));
+        }
     }
 
     private void PlayNext()

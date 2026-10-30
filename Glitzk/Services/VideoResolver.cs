@@ -1,4 +1,3 @@
-using Microsoft.Extensions.DependencyInjection;
 using System.Diagnostics.CodeAnalysis;
 using System.Net.Http;
 using System.Net.Http.Json;
@@ -6,32 +5,16 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 
 namespace Glitzk.Services;
-/*
-public struct VideoInfo
+
+record VideoInfo(string Id, string Title, TimeSpan Duration, bool IsLive)
 {
-    public string title;
-    public string id;
-    public TimeSpan duration;
-
-    public readonly string DurationString
-    {
-        get
-        {
-            string hours = duration.Hours == 0 ? string.Empty : $"{duration.Hours}:";
-            return $"{hours}{duration.Minutes:D2}:{duration.Seconds:D2}";
-        }
-    }
-
-    public VideoInfo(string title, string id, TimeSpan duration)
-    {
-        this.title = title;
-        this.id = id;
-        this.duration = duration;
-    }
+    public string DurationString() =>
+        Duration.TotalHours >= 1
+        ? $"{(int)Duration.TotalHours}:{Duration:mm\\:ss}"
+        : Duration.ToString(@"mm\:ss");
 }
-*/
 
-public static partial class YoutubeVideoResolver
+partial class VideoResolver(IHttpClientFactory httpClientFactory)
 {
     internal const string HttpClientName = "innertube";
     internal const string InnerTubeBaseUrl = "https://www.youtube.com/youtubei/v1/";
@@ -39,10 +22,19 @@ public static partial class YoutubeVideoResolver
     private const string ClientName = "WEB";
     private const string ClientVersion = "2.20260826.01.00";
 
-    private const string VideoOnlyFilterParams = "EgIQAQ==";
-
     [GeneratedRegex(@"(?:youtube\.com/(?:watch\?(?:.*&)?v=|embed/|shorts/)|youtu\.be/)([a-zA-Z0-9_-]{11})", RegexOptions.IgnoreCase)]
     private static partial Regex UrlPattern();
+
+    public async Task<VideoInfo?> ResolveAsync(string input, CancellationToken ct)
+    {
+        if (!TryExtractVideoId(input, out string? videoId))
+            videoId = await SearchVideoIdAsync(input, ct);
+
+        if (videoId == null)
+            return null;
+
+        return await GetVideoInfoAsync(videoId, ct);
+    }
 
     public static bool TryExtractVideoId(string url, [NotNullWhen(true)] out string? videoId)
     {
@@ -51,60 +43,21 @@ public static partial class YoutubeVideoResolver
         return match.Success;
     }
 
+    #region InnerTube
 
-    /*
-    public static async Task<VideoInfo?> ResolveVideoAsync(string input, CancellationToken ct = default)
+    private async Task<JsonDocument> PostInnerTubeAsync(string endpoint, object body, CancellationToken ct)
     {
-        string? videoId = ExtractVideoId(input);
+        using var request = new HttpRequestMessage(HttpMethod.Post, endpoint)
+        {
+            Content = JsonContent.Create(body)
+        };
 
-        videoId ??= await SearchVideoIdAsync(input, ct);
+        HttpClient client = httpClientFactory.CreateClient(HttpClientName);
 
-        if (videoId == null)
-            return null;
+        using HttpResponseMessage response = await client.SendAsync(request, ct);
+        response.EnsureSuccessStatusCode();
 
-        return await GetVideoInfoAsync(videoId, ct);
-    }
-
-    private static async Task<string?> SearchVideoIdAsync(string keyword, CancellationToken ct = default)
-    {
-        if (string.IsNullOrWhiteSpace(keyword))
-            return null;
-
-        using JsonDocument? response = await PostInnerTubeAsync(
-            "search",
-            new { context = BuildContext(), query = keyword, @params = VideoOnlyFilterParams },
-            ct);
-
-        if (response == null)
-            return null;
-
-        if (!TryGetSearchSections(response.RootElement, out JsonElement sections))
-            return null;
-
-        return FindFirstVideoId(sections);
-    }
-
-    private static async Task<VideoInfo?> GetVideoInfoAsync(string videoId, CancellationToken ct = default)
-    {
-        using JsonDocument? response = await PostInnerTubeAsync(
-            "player",
-            new { context = BuildContext(), videoId },
-            ct);
-
-        if (response == null)
-            return null;
-        
-        if (!response.RootElement.TryGetProperty("videoDetails", out JsonElement details))
-            return null;
-
-        string title = details.TryGetProperty("title", out JsonElement titleElement)
-            ? titleElement.GetString() ?? string.Empty : string.Empty;
-
-        int seconds = details.TryGetProperty("lengthSeconds", out JsonElement lengthElement)
-            && int.TryParse(lengthElement.GetString(), out int parsed)
-            ? parsed : 0;
-
-        return new VideoInfo(title, videoId, TimeSpan.FromSeconds(seconds));
+        return await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(ct), cancellationToken: ct);
     }
 
     private static object BuildContext() => new
@@ -118,35 +71,40 @@ public static partial class YoutubeVideoResolver
         }
     };
 
-    private static async Task<JsonDocument?> PostInnerTubeAsync(string endpoint, object body, CancellationToken ct)
+    private async Task<string?> SearchVideoIdAsync(string keyword, CancellationToken ct)
     {
-        try
-        {
-            using var request = new HttpRequestMessage(HttpMethod.Post, endpoint)
-            {
-                Content = JsonContent.Create(body)
-            };
-
-            HttpClient client = App.Services
-                .GetRequiredService<IHttpClientFactory>()
-                .CreateClient(HttpClientName);
-
-            using HttpResponseMessage response = await client.SendAsync(request, ct);
-
-            if (!response.IsSuccessStatusCode)
-                return null;
-
-            return await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(ct), cancellationToken: ct);
-        }
-        catch (HttpRequestException)
-        {
+        if (string.IsNullOrWhiteSpace(keyword))
             return null;
-        }
-        catch (JsonException)
-        {
+
+        using JsonDocument response = await PostInnerTubeAsync("search", new { context = BuildContext(), query = keyword }, ct);
+
+        if (!TryGetSearchSections(response.RootElement, out JsonElement sections))
             return null;
-        }
+
+        return FindFirstVideoId(sections);
     }
+
+    private async Task<VideoInfo?> GetVideoInfoAsync(string videoId, CancellationToken ct)
+    {
+        using JsonDocument response = await PostInnerTubeAsync("player", new { context = BuildContext(), videoId }, ct);
+
+        if (!response.RootElement.TryGetProperty("videoDetails", out JsonElement details))
+            return null;
+
+        string title = details.TryGetProperty("title", out JsonElement titleElement)
+            ? titleElement.GetString() ?? string.Empty : string.Empty;
+
+        int seconds = details.TryGetProperty("lengthSeconds", out JsonElement lengthElement)
+            && int.TryParse(lengthElement.GetString(), out int parsed)
+            ? parsed : 0;
+
+        bool isLive = (details.TryGetProperty("isLive", out JsonElement liveElement) && liveElement.GetBoolean())
+            || (details.TryGetProperty("isUpcoming", out JsonElement upcomingElement) && upcomingElement.GetBoolean());
+
+        return new VideoInfo(videoId, title, TimeSpan.FromSeconds(seconds), isLive);
+    }
+
+    #endregion InnerTube
 
     private static bool TryGetSearchSections(JsonElement root, out JsonElement sections)
     {
@@ -200,5 +158,4 @@ public static partial class YoutubeVideoResolver
 
         return false;
     }
-    */
 }
