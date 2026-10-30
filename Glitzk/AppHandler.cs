@@ -1,6 +1,3 @@
-using Glitzk.Services;
-using Glitzk.Storage;
-using ChzzkApi_CS.Session;
 using Hexa.NET.ImGui;
 using Hexa.NET.ImGui.Backends.OpenGL3;
 using Hexa.NET.ImGui.Backends.SDL3;
@@ -11,17 +8,6 @@ using System.IO;
 using System.Runtime.InteropServices;
 
 namespace Glitzk;
-
-public record CommandContext(
-    string SenderId,
-    UserRoleCode Role,
-    string Args,
-    long MessageTime);
-
-public record VideoRequest(
-    VideoInfo Video,
-    CommandContext Context);
-
 
 class AppHandler
 {

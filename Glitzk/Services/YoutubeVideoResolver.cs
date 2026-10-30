@@ -179,7 +179,6 @@ public static class YoutubeVideoResolver
 
     private static bool IsLiveOrUpcoming(JsonElement video)
     {
-        Console.WriteLine("검증 안해봄. 검증할 필요 있음");
         if (video.TryGetProperty("upcomingEventData", out _))
             return true;
 

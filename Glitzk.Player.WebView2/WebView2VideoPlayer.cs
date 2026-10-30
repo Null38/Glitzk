@@ -1,9 +1,9 @@
 using Microsoft.Web.WebView2.Core;
 using System.Drawing;
 
-namespace Glitzk.Services;
+namespace Glitzk.Player.WebView2;
 
-class WebView2VideoPlayer : IVideoPlayer
+public class WebView2VideoPlayer
 {
     private enum InitState { CreatingEnvironment, CreatingController, Ready, Error }
 
@@ -13,14 +13,8 @@ class WebView2VideoPlayer : IVideoPlayer
     private Task<CoreWebView2Controller>? controllerTask;
     private CoreWebView2Controller? controller;
     private Rectangle bounds;
-    private bool isPlaying = false;
 
     public bool IsReady => _state == InitState.Ready;
-
-    public bool IsPlaying => isPlaying;
-
-    Action? VideoEnd { get; set; }
-    Action? IVideoPlayer.VideoEnd { get => VideoEnd; set => VideoEnd = value; }
 
     private const string VirtualOrigin = "https://glitzk.local";
     private const string PlayerUrl = "https://glitzk.local/player.html";
@@ -121,14 +115,6 @@ class WebView2VideoPlayer : IVideoPlayer
                 controller.CoreWebView2.Settings.AreDevToolsEnabled = false;
                 controller.CoreWebView2.AddWebResourceRequestedFilter(PlayerUrl, CoreWebView2WebResourceContext.All);
                 controller.CoreWebView2.WebResourceRequested += OnWebResourceRequested;
-                controller.CoreWebView2.WebMessageReceived += (s, e) =>
-                {
-                    if (e.TryGetWebMessageAsString() == "next")
-                    {
-                        isPlaying = false;
-                        VideoEnd?.Invoke();
-                    }
-                };
                 controller.CoreWebView2.Navigate(PlayerUrl);
                 _state = InitState.Ready;
                 break;
@@ -141,13 +127,6 @@ class WebView2VideoPlayer : IVideoPlayer
         var stream = new System.IO.MemoryStream(System.Text.Encoding.UTF8.GetBytes(ShellHtml));
         e.Response = controller!.CoreWebView2.Environment.CreateWebResourceResponse(
             stream, 200, "OK", "Content-Type: text/html; charset=utf-8");
-    }
-
-    public void LoadVideo(string videoId)
-    {
-        if (!IsReady) return;
-        _ = controller!.CoreWebView2.ExecuteScriptAsync($"loadVideo('{videoId}')");
-        isPlaying = true;
     }
 
     public void SetBounds(int x, int y, int width, int height)
