@@ -1,5 +1,3 @@
-using Glitzk.Storage;
-using Microsoft.Extensions.DependencyInjection;
 using System.ComponentModel;
 using System.Xml.Serialization;
 using Glitzk.Services;
@@ -10,41 +8,83 @@ namespace Glitzk.Storage;
 [XmlRoot("SaveData")]
 public sealed class AppSettings
 {
-    // Fields, not properties: ImGui.InputText binds them by ref.
-    public string ClientId;
-    public string ClientSecret;
-    public string? AccessToken;
-    public string? RefreshToken;
-    public bool SaveLog
+    // Initializers, not a constructor: going through the setters would mark a fresh instance dirty.
+    private string clientId = string.Empty;
+    private string clientSecret = string.Empty;
+    private string? accessToken;
+    private string? refreshToken;
+    private bool saveLog;
+
+    private List<PlaylistEntry> autoPlayList = [];
+
+    private Dictionary<string, string> commands = new()
     {
-        get => logWriter._isEnabled;
-        set => logWriter._isEnabled = value;
+        ["!sr"] = "Song Request",
+        ["!ㄴㄱ"] = "Song Request",
+    };
+
+    public string ClientId
+    {
+        get => clientId;
+        set => Set(ref clientId, value);
     }
 
-    public List<PlaylistEntry> AutoPlayList;
+    public string ClientSecret
+    {
+        get => clientSecret;
+        set => Set(ref clientSecret, value);
+    }
+
+    public string? AccessToken
+    {
+        get => accessToken;
+        set => Set(ref accessToken, value);
+    }
+
+    public string? RefreshToken
+    {
+        get => refreshToken;
+        set => Set(ref refreshToken, value);
+    }
+
+    public bool SaveLog
+    {
+        get => saveLog;
+        set => Set(ref saveLog, value);
+    }
 
     [XmlIgnore]
-    public Dictionary<string, string> Commands;
-
+    public IReadOnlyList<PlaylistEntry> AutoPlayList => autoPlayList;
 
     [XmlIgnore]
-    private readonly LogWriter logWriter = App.Services.GetRequiredService<LogWriter>();
+    public IReadOnlyDictionary<string, string> Commands => commands;
+
+    // Serialization views: XmlSerializer cannot bind the read-only ones above.
+    // The setters assign backing fields directly so a freshly loaded instance is not dirty.
+    [XmlArray("AutoPlayList")]
+    [XmlArrayItem("PlaylistEntry")]
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public PlaylistEntry[] AutoPlayListArray
+    {
+        get => [.. autoPlayList];
+        set => autoPlayList = value is null ? [] : [.. value];
+    }
 
     [XmlArray("Commands")]
     [XmlArrayItem("Command")]
     [EditorBrowsable(EditorBrowsableState.Never)]
     public Command[] CommandArray
     {
-        get => Commands.Select(pair => new Command { Key = pair.Key, Value = pair.Value }).ToArray();
+        get => commands.Select(pair => new Command { Key = pair.Key, Value = pair.Value }).ToArray();
         set
         {
-            Commands = [];
+            commands = [];
 
-            if (value == null) 
+            if (value == null)
                 return;
 
             foreach (var command in value)
-                Commands[command.Key] = command.Value;
+                commands[command.Key] = command.Value;
         }
     }
 
@@ -57,20 +97,44 @@ public sealed class AppSettings
         public string Value;
     }
 
-    public AppSettings()
+    public void SetTokens(string accessToken, string refreshToken)
     {
-        ClientId = string.Empty;
-        ClientSecret = string.Empty;
-        AccessToken = null;
-        RefreshToken = null;
-        SaveLog = false;
+        AccessToken = accessToken;
+        RefreshToken = refreshToken;
+    }
 
-        Commands = new Dictionary<string, string>
-        {
-            ["!sr"] = "Song Request",
-            ["!ㄴㄱ"] = "Song Request",
-        };
+    public void AddPlaylistEntry(VideoInfo video)
+    {
+        autoPlayList.Add(new PlaylistEntry(video));
+        IsDirty = true;
+    }
 
-        AutoPlayList = [];
+    public void RemovePlaylistEntryAt(int index)
+    {
+        autoPlayList.RemoveAt(index);
+        IsDirty = true;
+    }
+
+    public void SetCommand(string trigger, string function)
+    {
+        commands[trigger] = function;
+        IsDirty = true;
+    }
+
+    public void RemoveCommand(string trigger)
+    {
+        if (commands.Remove(trigger))
+            IsDirty = true;
+    }
+
+    internal void ClearDirty() => IsDirty = false;
+
+    private void Set<T>(ref T field, T value)
+    {
+        if (EqualityComparer<T>.Default.Equals(field, value))
+            return;
+
+        field = value;
+        IsDirty = true;
     }
 }

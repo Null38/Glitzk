@@ -42,9 +42,7 @@ internal static class Program
 
         SDL.SetWindowParent(videoWindow.Handle, mainWindow.Handle);
 
-        var settings = App.Services.GetRequiredService<SettingsService>();
-
-        _ = new AppHandler(mainWindow, videoWindow, settings);
+        _ = new AppHandler(mainWindow, videoWindow);
 
         mainWindow.Run();
 

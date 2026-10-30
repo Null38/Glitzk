@@ -7,23 +7,14 @@ namespace Glitzk.Storage
     public class LogWriter
     {
         private readonly string filePath;
-        public volatile bool _isEnabled = true;
 
         public LogWriter()
         {
             filePath = Path.Combine(AppContext.BaseDirectory, "Logs");
         }
 
-        public void AppendLog(Exception ex)
-        {
-            AppendLog(ex, DateTimeOffset.UtcNow);
-        }
-
         public void AppendLog(Exception ex, DateTimeOffset dateTime)
         {
-            if (!_isEnabled)
-                return;
-
             if (!Directory.Exists(filePath))
                 Directory.CreateDirectory(filePath);
 

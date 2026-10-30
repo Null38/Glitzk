@@ -58,8 +58,7 @@ class AppHandler
     private ImGuiIOPtr io;
 
     private IVideoPlayer videoPlayer = new NullVideoPlayer();
-    private readonly ChzzkChatReader chatReader;
-    private readonly SettingsService settings;
+    private readonly ChzzkChatReader chatReader = new();
     private CancellationTokenSource? connectCts;
 
     private readonly LinkedList<VideoRequest> videoQueue = new();//TODO : 비디오 큐 스레드 안정성 해결하기.
@@ -76,12 +75,12 @@ class AppHandler
     private readonly AppWindow main;
     private readonly AppWindow video;
 
-    public AppHandler(AppWindow main, AppWindow video, SettingsService settings)
+    private readonly IOSystem ioSystem = new();
+
+    public AppHandler(AppWindow main, AppWindow video)
     {
         this.main  = main;
         this.video = video;
-        this.settings = settings;
-        chatReader = new(settings);
 
         main.Load += OnLoad;
         main.Update += OnUpdate;
@@ -90,7 +89,7 @@ class AppHandler
         main.EventReceived += OnEvent;
 
         chatReader.ChatReceived += (msg) => OnChatReceived(msg.Content, msg.SenderChannelId, msg.Profile.UserRoleCode, msg.MessageTime);
-        chatReader.WriteLog += App.Services.GetRequiredService<LogWriter>().AppendLog;
+        chatReader.WriteLog += ioSystem.AppendLog;
 
         commandFunction["Song Request"] = HandleSongRequest;
     }
@@ -135,13 +134,13 @@ class AppHandler
             return;
         }
 
-        if (settings.Current.AutoPlayList.Count > 0)
+        if (App.Settings.AutoPlayList.Count > 0)
             videoPlayer.LoadVideo(PickFromAutoList());
     }
 
     private string PickFromAutoList()
     {
-        var list = settings.Current.AutoPlayList;
+        var list = App.Settings.AutoPlayList;
 
         if (list.Count == 1)
         {
@@ -170,7 +169,7 @@ class AppHandler
         if (video is null)
             return;
 
-        settings.AddPlaylistEntry(video.Value);
+        App.Settings.AddPlaylistEntry(video.Value);
     }
 
     private void OnUpdate(double dt)
@@ -188,6 +187,8 @@ class AppHandler
         RenderMainView();
         RenderSettingsWindow();
         RenderChatTestWindow();
+
+        ioSystem.Flush();
     }
 
     private void OnRender(double dt)
@@ -237,6 +238,8 @@ class AppHandler
 
     private void OnClosing()
     {
+        ioSystem.Flush();
+
         videoPlayer.Dispose();
         ImGuiImplOpenGL3.Shutdown();
         ImGuiImplSDL3.Shutdown();
@@ -252,11 +255,11 @@ class AppHandler
         string[] split = content.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
 
         if (split.Length < 2)
-        {
             return;
-        }
 
-        bool hasMethod = settings.Current.Commands.TryGetValue(split[0], out string? method);
+        AppSettings settings = App.Settings;
+
+        bool hasMethod = settings.Commands.TryGetValue(split[0], out string? method);
 
         if (!hasMethod || !commandFunction.TryGetValue(method!, out var action)) 
             return;
@@ -394,7 +397,7 @@ class AppHandler
 
 
             TextEllipsisWithTooltip(video.Video.title, ImGui.GetContentRegionAvail().X - btnWidth - spacing);
-            ImGui.TextUnformatted(video.Video.DurationString());
+            ImGui.TextUnformatted(video.Video.DurationString);
             ImGui.EndGroup();
 
             ImGui.SameLine();
@@ -418,6 +421,8 @@ class AppHandler
     {
         ImGui.BeginGroup();
 
+        AppSettings settings = App.Settings;
+
         float width = MathF.Min(ListMaxWidth, ImGui.GetContentRegionAvail().X);
         float addBtnWidth = ImGui.CalcTextSize("Add").X + ImGui.GetStyle().FramePadding.X * 2;
 
@@ -432,7 +437,7 @@ class AppHandler
 
         ImGui.BeginChild("AutoList", new Vector2(width, ListHeight), ImGuiChildFlags.Borders);
 
-        var autoList = settings.Current.AutoPlayList;
+        var autoList = settings.AutoPlayList;
         int toRemove = -1;
         for (int i = 0; i < autoList.Count; i++)
         {
@@ -526,13 +531,15 @@ class AppHandler
 
     private void RenderSettingsWindow()
     {
-        if (!showSettings) return;
+        if (!showSettings)
+            return;
+
+        AppSettings settings = App.Settings;
 
         ImGui.SetNextWindowSize(new Vector2(SettingsWindowWidth, SettingsWindowHeight), ImGuiCond.FirstUseEver);
 
         if (ImGui.Begin("Settings", ref showSettings))
         {
-            bool changed = false;
             ImGui.Text("Chat Test");
             ImGui.SameLine();
             ImGui.Checkbox("##ChatTest", ref isTest);
@@ -540,13 +547,10 @@ class AppHandler
             ImGui.Text("Save Log File");
             ImGui.SameLine();
 
-            bool saveLog = settings.Current.SaveLog;
+            bool saveLog = settings.SaveLog;
 
             if (ImGui.Checkbox("##log", ref saveLog))
-            {
-                settings.Current.SaveLog = saveLog;
-                changed = true;
-            }
+                settings.SaveLog = saveLog;
 
             ImGui.Spacing();
             ImGui.Separator();
@@ -554,26 +558,29 @@ class AppHandler
             ImGui.BeginDisabled(chatReader.State != ConnectionState.Disconnected);
 
             ImGui.Text("Chzzk Client Id");
-            changed |= ImGui.InputText("##Id", ref settings.Current.ClientId, CredentialBufferSize);
+            string clientId = settings.ClientId;
+            if (ImGui.InputText("##Id", ref clientId, CredentialBufferSize))
+                settings.ClientId = clientId;
+
             ImGui.Text("Chzzk Client Secret");
-            changed |= ImGui.InputText("##Secret", ref settings.Current.ClientSecret, CredentialBufferSize, ImGuiInputTextFlags.Password);
+            string clientSecret = settings.ClientSecret;
+            if (ImGui.InputText("##Secret", ref clientSecret, CredentialBufferSize, ImGuiInputTextFlags.Password))
+                settings.ClientSecret = clientSecret;
 
             ImGui.EndDisabled();
-
-            if (changed) settings.Save();
 
             ImGui.Spacing();
             ImGui.Separator();
 
             ImGui.Text("Custom Commands");
 
-            RenderCommandsChild();
+            RenderCommandsChild(settings);
         }
 
         ImGui.End();
     }
 
-    private void RenderCommandsChild()
+    private void RenderCommandsChild(AppSettings settings)
     {
         string[] funcKeys = commandFunction.Keys.ToArray();
 
@@ -596,7 +603,7 @@ class AppHandler
         ImGui.BeginChild("CommandList", new Vector2(0, CommandListHeight), ImGuiChildFlags.Borders);
 
         string? toRemove = null;
-        foreach (var (trigger, funcName) in settings.Current.Commands)
+        foreach (var (trigger, funcName) in settings.Commands)
         {
             ImGui.PushID(trigger);
             ImGui.BeginChild("item", new Vector2(0, CommandItemHeight), ImGuiChildFlags.Borders);

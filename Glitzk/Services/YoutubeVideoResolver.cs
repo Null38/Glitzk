@@ -11,17 +11,20 @@ public struct VideoInfo
     public string id;
     public TimeSpan duration;
 
+    public readonly string DurationString
+    {
+        get
+        {
+            string hours = duration.Hours == 0 ? string.Empty : $"{duration.Hours}:";
+            return $"{hours}{duration.Minutes:D2}:{duration.Seconds:D2}";
+        }
+    }
+
     public VideoInfo(string title, string id, TimeSpan duration)
     {
         this.title = title;
         this.id = id;
         this.duration = duration;
-    }
-
-    public string DurationString()
-    {
-        string hours = duration.Hours == 0 ? string.Empty : $"{duration.Hours}:";
-        return $"{hours}{duration.Minutes:D2}:{duration.Seconds:D2}";
     }
 }
 
@@ -35,7 +38,7 @@ public static class YoutubeVideoResolver
 
     private const string VideoOnlyFilterParams = "EgIQAQ==";
 
-    private static readonly Regex UrlPattern = new Regex(
+    private static readonly Regex UrlPattern = new(
         @"(?:youtube\.com/(?:watch\?(?:.*&)?v=|embed/|shorts/)|youtu\.be/)([a-zA-Z0-9_-]{11})",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
@@ -43,8 +46,7 @@ public static class YoutubeVideoResolver
     {
         string? videoId = ExtractVideoId(input);
 
-        if (videoId == null)
-            videoId = await SearchVideoIdAsync(input, ct);
+        videoId ??= await SearchVideoIdAsync(input, ct);
 
         if (videoId == null)
             return null;

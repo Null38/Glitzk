@@ -1,7 +1,6 @@
 using Glitzk.Storage;
 using ChzzkApi_CS;
 using ChzzkApi_CS.Session;
-using Glitzk.Storage;
 using Microsoft.Extensions.DependencyInjection;
 using System.Net.Http;
 
@@ -18,7 +17,6 @@ public enum ConnectionState
 class ChzzkChatReader : IDisposable
 {
     private readonly IHttpClientFactory httpClientFactory;
-    private readonly SettingsService settings;
 
     public ConnectionState State { get; private set; } = ConnectionState.Disconnected;
     public event Action<ChatMessage>? ChatReceived;
@@ -31,12 +29,11 @@ class ChzzkChatReader : IDisposable
     private ChzzkSession? session;
     private readonly HashSet<string> pendingEchoes = [];
 
-    public ChzzkChatReader(SettingsService settings)
+    public ChzzkChatReader()
     {
         httpClientFactory = App.Services.GetRequiredService<IHttpClientFactory>();
-        this.settings = settings;
 
-        var saved = settings.Current;
+        var saved = App.Settings;
 
         clientApi = new ChzzkClientApi(
             httpClientFactory,
@@ -54,7 +51,7 @@ class ChzzkChatReader : IDisposable
 
         State = ConnectionState.Connecting;
 
-        clientApi.SetCredentials(settings.Current.ClientId, settings.Current.ClientSecret);
+        clientApi.SetCredentials(App.Settings.ClientId, App.Settings.ClientSecret);
 
         try
         {
@@ -117,7 +114,7 @@ class ChzzkChatReader : IDisposable
 
         userApi = await clientApi.IssueAccessTokenAsync(code, state, ct);
 
-        settings.SetTokens(userApi.AccessToken, userApi.RefreshToken);
+        App.Settings.SetTokens(userApi.AccessToken, userApi.RefreshToken);
     }
 
     private async Task<T> ExecuteWithAuthenticationAsync<T>(Func<Task<T>> apiCall)
@@ -134,7 +131,7 @@ class ChzzkChatReader : IDisposable
 
         if (refreshed.Code == ChzzkStatusCode.Success)
         {
-            settings.SetTokens(userApi!.AccessToken, userApi!.RefreshToken);
+            App.Settings.SetTokens(userApi!.AccessToken, userApi!.RefreshToken);
 
             return await apiCall();
         }

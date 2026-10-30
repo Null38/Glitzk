@@ -1,28 +1,23 @@
 using Glitzk.Services;
 using Glitzk.Storage;
 using ChzzkApi_CS.Extensions;
-using Glitzk.Storage;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Glitzk;
 
-internal static class App
+static class App
 {
     public static readonly IServiceProvider Services;
+    public static AppSettings Settings = new();
 
     static App()
     {
         var services = new ServiceCollection();
         services.AddChzzkApiClient();
-        services.AddSingleton<SettingsStore>();
-        services.AddSingleton<SettingsService>();
-        services.AddSingleton<LogWriter>();
         services.AddHttpClient(
             YoutubeVideoResolver.HttpClientName,
             client => client.BaseAddress = new Uri(YoutubeVideoResolver.InnerTubeBaseUrl));
 
         Services = services.BuildServiceProvider();
-
-        Services.GetRequiredService<SettingsStore>().ExceptionHandler = Services.GetRequiredService<LogWriter>().AppendLog;
     }
 }
