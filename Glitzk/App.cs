@@ -1,3 +1,7 @@
+using Glitzk.Player;
+#if WINDOWS
+using Glitzk.Player.WebView2;
+#endif
 using Hexa.NET.ImGui;
 using Hexa.NET.ImGui.Backends.OpenGL3;
 using Hexa.NET.ImGui.Backends.SDL3;
@@ -24,6 +28,11 @@ class App : IDisposable
 
     private readonly AppWindow main;
     private readonly AppWindow video;
+
+    private readonly Inbox inbox = new();
+
+    private readonly IVideoPlayer player;
+    private int loadId;
 
     private readonly nint glContext;
     private readonly GL gl;
@@ -70,6 +79,28 @@ class App : IDisposable
         ImGuiImplOpenGL3.Init("#version 130");
 
         gl = new GL(new GlBindingsContext(main.Handle, glContext));
+
+        player = CreatePlayer();
+        SDL.GetWindowSizeInPixels(video.Handle, out int videoWidth, out int videoHeight);
+        player.Resize(videoWidth, videoHeight);
+    }
+
+    private IVideoPlayer CreatePlayer()
+    {
+#if WINDOWS
+        nint hwnd = SDL.GetPointerProperty(SDL.GetWindowProperties(video.Handle), SDL.Props.WindowWin32HWNDPointer, nint.Zero);
+        return new WebView2VideoPlayer(hwnd, e => inbox.Post(() => OnPlayerEvent(e)));
+#else
+        throw new PlatformNotSupportedException("No video player backend for this platform.");
+#endif
+    }
+
+    private void OnPlayerEvent(PlayerEvent e)
+    {
+        Console.WriteLine(e);
+
+        if (e is PlayerReady)
+            player.Load("jNQXAC9IVRw", ++loadId);
     }
 
     public void Run()
@@ -86,8 +117,15 @@ class App : IDisposable
                     case SDL.EventType.Quit:
                         running = false;
                         break;
+
+                    case SDL.EventType.WindowPixelSizeChanged when e.Window.WindowID == video.Id:
+                        player.Resize(e.Window.Data1, e.Window.Data2);
+                        break;
                 }
             }
+
+            player.Tick();
+            inbox.Drain();
 
             if ((SDL.GetWindowFlags(main.Handle) & SDL.WindowFlags.Minimized) != 0)
             {
@@ -144,6 +182,8 @@ class App : IDisposable
 
     public void Dispose()
     {
+        player.Dispose();
+
         ImGuiImplOpenGL3.Shutdown();
         ImGuiImplSDL3.Shutdown();
         ImGui.DestroyContext();
