@@ -1,9 +1,12 @@
 using SDL3;
 using System.Drawing;
+#if WINDOWS
+using System.Runtime.InteropServices;
+#endif
 
 namespace Glitzk.Platform;
 
-class AppWindow
+partial class AppWindow
 {
     public nint Handle { get; }
     public uint Id { get; }
@@ -34,4 +37,22 @@ class AppWindow
 
         Id = SDL.GetWindowID(Handle);
     }
+
+#if WINDOWS
+    private const int GwlStyle = -16;
+    private const nint WsSysMenu = 0x00080000;
+
+    [LibraryImport("user32.dll", EntryPoint = "GetWindowLongPtrW")]
+    private static partial nint GetWindowLongPtr(nint hwnd, int index);
+
+    [LibraryImport("user32.dll", EntryPoint = "SetWindowLongPtrW")]
+    private static partial nint SetWindowLongPtr(nint hwnd, int index, nint value);
+
+    public void RemoveTitleBarButtons()
+    {
+        nint hwnd = SDL.GetPointerProperty(SDL.GetWindowProperties(Handle), SDL.Props.WindowWin32HWNDPointer, nint.Zero);
+
+        SetWindowLongPtr(hwnd, GwlStyle, GetWindowLongPtr(hwnd, GwlStyle) & ~WsSysMenu);
+    }
+#endif
 }

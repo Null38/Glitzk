@@ -63,10 +63,12 @@ class App : IDisposable
         SDL.GLSetAttribute(SDL.GLAttr.DepthSize, 24);
         SDL.GLSetAttribute(SDL.GLAttr.StencilSize, 8);
 
-        main = new AppWindow("Glitzk", DefaultMainWindowWidth, DefaultMainWindowHeight,
-            SDL.WindowFlags.OpenGL | SDL.WindowFlags.Resizable | SDL.WindowFlags.Hidden);
-        video = new AppWindow("YouTubePlayer", DefaultVideoWindowWidth, DefaultVideoWindowHeight,
-            SDL.WindowFlags.Resizable);
+        main = new AppWindow("Glitzk", DefaultMainWindowWidth, DefaultMainWindowHeight, SDL.WindowFlags.OpenGL | SDL.WindowFlags.Resizable | SDL.WindowFlags.Hidden);
+        video = new AppWindow("YouTubePlayer", DefaultVideoWindowWidth, DefaultVideoWindowHeight, SDL.WindowFlags.Resizable);
+
+#if WINDOWS
+        video.RemoveTitleBarButtons();
+#endif
 
         SDL.SetWindowMinimumSize(main.Handle, MinWindowWidth, MinWindowHeight);
         SDL.SetWindowParent(video.Handle, main.Handle);
