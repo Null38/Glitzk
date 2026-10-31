@@ -84,7 +84,7 @@ partial class VideoResolver(IHttpClientFactory httpClientFactory)
         return FindFirstVideoId(sections);
     }
 
-    private async Task<VideoInfo?> GetVideoInfoAsync(string videoId, CancellationToken ct)
+    public async Task<VideoInfo?> GetVideoInfoAsync(string videoId, CancellationToken ct)
     {
         using JsonDocument response = await PostInnerTubeAsync("player", new { context = BuildContext(), videoId }, ct);
 

@@ -38,20 +38,22 @@ class App : IDisposable
     private readonly ChatService chat;
     private readonly VideoResolver resolver;
 
+    //UI
     private readonly SettingsPanel settings;
     private readonly AlertPopup alerts = new();
+    private readonly QueuePanel queue;
 
     private readonly IVideoPlayer player;
     private int loadId;
     private bool isIdle;
 
-    private readonly LinkedList<string> requests = new(["oucIenRenTY", "j5-TjI3bzvbCU4", "eTplxWaAD8o", "zb_0xMwJ6B8", "j5-TjI3bzvbCU4"]);//임시 테스트 요청
+    private readonly LinkedList<VideoInfo> requests = new();
 
     private readonly nint glContext;
     private readonly GL gl;
     private readonly ImGuiIOPtr io;
 
-    public unsafe App()
+    public App()
     {
         SDL.GLSetAttribute(SDL.GLAttr.ContextFlags, 0);
         SDL.GLSetAttribute(SDL.GLAttr.ContextProfileMask, (int)SDL.GLProfile.Core);
@@ -87,11 +89,17 @@ class App : IDisposable
         ImGui.StyleColorsDark();
 
         ImGuiImplSDL3.SetCurrentContext(ctx);
-        ImGuiImplSDL3.InitForOpenGL((SDLWindow*)main.Handle.ToPointer(), (void*)glContext);
+        unsafe
+        {
+            ImGuiImplSDL3.InitForOpenGL((SDLWindow*)main.Handle.ToPointer(), (void*)glContext);
+        }
+
         ImGuiImplOpenGL3.SetCurrentContext(ctx);
         ImGuiImplOpenGL3.Init("#version 130");
 
         gl = new GL(new GlBindingsContext(main.Handle, glContext));
+
+        queue = new QueuePanel();
 
         player = CreatePlayer();
         SDL.GetWindowSizeInPixels(video.Handle, out int videoWidth, out int videoHeight);
@@ -108,6 +116,23 @@ class App : IDisposable
         chat = new ChatService(httpClientFactory, inbox, OnChat, alerts.Show);
         resolver = new VideoResolver(httpClientFactory);
         settings = new SettingsPanel(chat);
+
+        _ = Task.Run(async () =>//임시 테스트 요청
+        {
+            foreach (string id in new[] {"oucIenRenTY", "rCvKr6nsS3w", "eTplxWaAD8o", "zb_0xMwJ6B8", "rCvKr6nsS3w"})
+            {
+                VideoInfo info = await resolver.GetVideoInfoAsync(id, CancellationToken.None)
+                    ?? new VideoInfo(id, id, TimeSpan.Zero, false);
+
+                inbox.Post(() =>
+                {
+                    requests.AddLast(info);
+
+                    if (isIdle)
+                        PlayNext();
+                });
+            }
+        });
     }
 
     private IVideoPlayer CreatePlayer()
@@ -122,8 +147,6 @@ class App : IDisposable
 
     private void OnPlayerEvent(PlayerEvent e)
     {
-        Console.WriteLine(e);
-
         switch (e)
         {
             case PlayerReady:
@@ -158,12 +181,10 @@ class App : IDisposable
             VideoInfo? info = await resolver.ResolveAsync(input, CancellationToken.None);
             inbox.Post(() =>
             {
-                Console.WriteLine(info);
-
                 if (info == null)
                     return;
 
-                requests.AddLast(info.Id);
+                requests.AddLast(info);
 
                 if (isIdle)
                     PlayNext();
@@ -183,7 +204,7 @@ class App : IDisposable
             return;
 
         requests.RemoveFirst();
-        player.Load(node.Value, ++loadId);
+        player.Load(node.Value.Id, ++loadId);
     }
 
     public void Run()
@@ -193,7 +214,10 @@ class App : IDisposable
         {
             while (SDL.PollEvent(out var e))
             {
-                ProcessImGuiEvent(e);
+                unsafe
+                {
+                    ImGuiImplSDL3.ProcessEvent(new SDLEventPtr((SDLEvent*)&e));
+                }
 
                 switch ((SDL.EventType)e.Type)
                 {
@@ -218,11 +242,6 @@ class App : IDisposable
 
             DrawFrame();
         }
-    }
-
-    private static unsafe void ProcessImGuiEvent(SDL.Event e)
-    {
-        ImGuiImplSDL3.ProcessEvent(new SDLEventPtr((SDLEvent*)&e));
     }
 
     #region Draw
@@ -301,6 +320,8 @@ class App : IDisposable
             else
                 chat.Disconnect();
         }
+
+        queue.Draw(requests);
 
         alerts.Draw();
 
