@@ -35,6 +35,7 @@ class App : IDisposable
     private readonly AppWindow video;
 
     private readonly Inbox inbox = new();
+    private readonly LogWriter log;
     private readonly ServiceProvider services;
     private readonly ChatService chat;
     private readonly VideoResolver resolver;
@@ -53,6 +54,8 @@ class App : IDisposable
 
     public App()
     {
+        log = new LogWriter(message => inbox.Post(() => alerts.Show(message)));
+
         SDL.GLSetAttribute(SDL.GLAttr.ContextFlags, 0);
         SDL.GLSetAttribute(SDL.GLAttr.ContextProfileMask, (int)SDL.GLProfile.Core);
         SDL.GLSetAttribute(SDL.GLAttr.ContextMajorVersion, 3);
@@ -355,5 +358,7 @@ class App : IDisposable
 
         SDL.DestroyWindow(video.Handle);
         SDL.DestroyWindow(main.Handle);
+
+        log.Dispose();
     }
 }
