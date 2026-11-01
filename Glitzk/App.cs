@@ -27,6 +27,7 @@ class App : IDisposable
 
     private const float BackgroundBrightness = 25 / 255f;
     private const float FontSize = 18f;
+    private const float SectionMaxWidth = 500f;
 
     private const uint MinimizedDelayMs = 16;
 
@@ -41,13 +42,10 @@ class App : IDisposable
     //UI
     private readonly SettingsPanel settings;
     private readonly AlertPopup alerts = new();
-    private readonly QueuePanel queue;
+    private readonly FallbackInput fallbackInput;
 
     private readonly IVideoPlayer player;
-    private int loadId;
-    private bool isIdle;
-
-    private readonly LinkedList<VideoInfo> requests = new();
+    private readonly PlaybackController playback;
 
     private readonly nint glContext;
     private readonly GL gl;
@@ -101,9 +99,9 @@ class App : IDisposable
 
         gl = new GL(new GlBindingsContext(main.Handle, glContext));
 
-        queue = new QueuePanel();
-
         player = CreatePlayer();
+        playback = new PlaybackController(player);
+        fallbackInput = new FallbackInput(input => _ = AddFallbackAsync(input));
         SDL.GetWindowSizeInPixels(video.Handle, out int videoWidth, out int videoHeight);
         player.Resize(videoWidth, videoHeight);
 
@@ -126,13 +124,7 @@ class App : IDisposable
                 VideoInfo info = await resolver.GetVideoInfoAsync(id, CancellationToken.None)
                     ?? new VideoInfo(id, id, TimeSpan.Zero, false);
 
-                inbox.Post(() =>
-                {
-                    requests.AddLast(info);
-
-                    if (isIdle)
-                        PlayNext();
-                });
+                inbox.Post(() => playback.Enqueue(info));
             }
         });
     }
@@ -141,28 +133,10 @@ class App : IDisposable
     {
 #if WINDOWS
         nint hwnd = SDL.GetPointerProperty(SDL.GetWindowProperties(video.Handle), SDL.Props.WindowWin32HWNDPointer, nint.Zero);
-        return new WebView2VideoPlayer(hwnd, e => inbox.Post(() => OnPlayerEvent(e)));
+        return new WebView2VideoPlayer(hwnd, e => inbox.Post(() => playback.OnPlayerEvent(e)));
 #else
         throw new PlatformNotSupportedException("No video player backend for this platform.");
 #endif
-    }
-
-    private void OnPlayerEvent(PlayerEvent e)
-    {
-        switch (e)
-        {
-            case PlayerReady:
-                PlayNext();
-                break;
-
-            case PlayerStateChanged { State: PlaybackState.Ended } ended when ended.LoadId == loadId:
-                PlayNext();
-                break;
-
-            case PlayerError error when error.LoadId == loadId:
-                PlayNext();
-                break;
-        }
     }
 
     private void OnChat(ChatMessage message)//임시형태
@@ -186,10 +160,7 @@ class App : IDisposable
                 if (info == null)
                     return;
 
-                requests.AddLast(info);
-
-                if (isIdle)
-                    PlayNext();
+                playback.Enqueue(info);
             });
         }
         catch (Exception ex)
@@ -198,15 +169,23 @@ class App : IDisposable
         }
     }
 
-    private void PlayNext()
+    private async Task AddFallbackAsync(string input)
     {
-        var node = requests.First;
-        isIdle = node == null;
-        if (node == null)
-            return;
-
-        requests.RemoveFirst();
-        player.Load(node.Value.Id, ++loadId);
+        try
+        {
+            VideoInfo? info = await resolver.ResolveAsync(input, CancellationToken.None);
+            inbox.Post(() =>
+            {
+                if (info == null)
+                    alerts.Show($"Video not found: {input}");
+                else
+                    playback.AddFallback(info);
+            });
+        }
+        catch (Exception ex)
+        {
+            inbox.Post(() => alerts.Show(ex.Message));
+        }
     }
 
     public void Run()
@@ -315,6 +294,10 @@ class App : IDisposable
             _ => throw new NotImplementedException()
         };
 
+        float sectionWidth = MathF.Min(SectionMaxWidth, ImGui.GetContentRegionAvail().X);
+
+        ImGui.BeginGroup();
+
         if (ImGui.Button($"{label}##ChatService"))
         {
             if (chat.Status == ChatStatus.Disconnected)
@@ -323,7 +306,19 @@ class App : IDisposable
                 chat.Disconnect();
         }
 
-        queue.Draw(requests);
+        VideoListPanel.DrawRequests(playback.Requests, sectionWidth);
+
+        ImGui.EndGroup();
+
+        if (ImGui.GetContentRegionAvail().X >= SectionMaxWidth * 2 + ImGui.GetStyle().ItemSpacing.X)
+            ImGui.SameLine();
+
+        ImGui.BeginGroup();
+
+        fallbackInput.Draw(sectionWidth);
+        VideoListPanel.DrawFallbacks(playback.Fallbacks, playback.RemoveFallback, sectionWidth);
+
+        ImGui.EndGroup();
 
         alerts.Draw();
 
