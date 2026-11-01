@@ -21,7 +21,9 @@ class ChatService
 
     private readonly Action<Action> post;
     private readonly Action<ChatMessage> onChat;
-    private readonly Action<string> onError;
+    private readonly Action<string> onConnectFailed;
+    private readonly Action<Exception> onSessionException;
+    private readonly Action<string> onDisconnected;
     private readonly IHttpClientFactory httpClientFactory;
 
     private Credentials credentials;
@@ -34,12 +36,15 @@ class ChatService
     public string ClientId => credentials.ClientId;
     public string ClientSecret => credentials.ClientSecret;
 
-    public ChatService(IHttpClientFactory httpClientFactory, Action<Action> post, Action<ChatMessage> onChat, Action<string> onError)
+    public ChatService(IHttpClientFactory httpClientFactory, Action<Action> post, 
+        Action<ChatMessage> onChat, Action<string> onConnectFailed, Action<Exception> onSessionException, Action<string> onDisconnected)
     {
         this.httpClientFactory = httpClientFactory;
         this.post = post;
         this.onChat = onChat;
-        this.onError = onError;
+        this.onConnectFailed = onConnectFailed;
+        this.onSessionException = onSessionException;
+        this.onDisconnected = onDisconnected;
 
         credentials = TempSave.Load();
         client = new ChzzkClient(httpClientFactory, credentials.ClientId, credentials.ClientSecret);
@@ -71,12 +76,6 @@ class ChatService
     {
         client = new ChzzkClient(httpClientFactory, credentials.ClientId, credentials.ClientSecret);
         client.Rules.Add("TokenRefresh", RefreshTokenRule);
-    }
-
-    private void Fail(string error)
-    {
-        Disconnect();
-        onError(error);
     }
 
     private async Task ConnectAsync(Credentials saved, CancellationToken ct)
@@ -122,14 +121,35 @@ class ChatService
             post(() =>
             {
                 if (!ct.IsCancellationRequested)
-                    Fail(ex.Message);
+                {
+                    Disconnect();
+                    onConnectFailed(GetConnectFailureMessage(ex));
+                }
             });
         }
     }
 
+    private static string GetConnectFailureMessage(Exception ex) => ex switch
+    {
+        ChzzkApiException api when 
+        api.GetAuthError() == ChzzkAuthError.InvalidClient => "Client ID 또는 Secret이 유효하지 않습니다.",
+        ChzzkAuthorizationException => "치지직 api 연결 동의에 실패하였습니다.",
+        HttpListenerException => "로그인 포트 8080을 사용할 수 없습니다.",
+        HttpRequestException or IOException => "치지직 서버에 연결할 수 없습니다.",
+        TimeoutException => "연결 시간이 초과되었습니다.",
+        _ => $"연결에 실패했습니다: {ex.Message}"
+    };
+
     private void RegisterEvents(ChzzkSession target, CancellationToken ct)
     {
-        target.Exceptions.SetExceptionOccurred(e => Console.WriteLine(e.Exception));
+        target.Exceptions.SetExceptionOccurred(e =>
+        {
+            post(() =>
+            {
+                if (!ct.IsCancellationRequested)
+                    onSessionException(e.Exception);
+            });
+        });
 
         target.ChatReceived += chat =>
         {
@@ -146,7 +166,10 @@ class ChatService
             post(() =>
             {
                 if (!ct.IsCancellationRequested)
-                    Fail($"채팅 연결이 끊겼습니다: {reason}");
+                {
+                    Disconnect();
+                    onDisconnected($"채팅 연결이 끊겼습니다: {reason}");
+                }
             });
             return Task.CompletedTask;
         };
@@ -158,7 +181,10 @@ class ChatService
                 post(() =>
                 {
                     if (!ct.IsCancellationRequested)
-                        Fail("채팅 구독이 해제되었습니다.");
+                    {
+                        Disconnect();
+                        onDisconnected("채팅 메시지 조회 권한이 해제되었습니다.");
+                    }
                 });
             }
             return Task.CompletedTask;

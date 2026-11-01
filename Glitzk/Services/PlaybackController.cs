@@ -4,9 +4,11 @@ namespace Glitzk.Services;
 
 enum PlaybackMode { Idle, Paused, Running  }
 
-class PlaybackController(IVideoPlayer player)
+class PlaybackController(IVideoPlayer player, Action<VideoInfo> onVideoSkipped, Action<string> onPlayerFailed)
 {
     private readonly IVideoPlayer player = player;
+    private readonly Action<VideoInfo> onVideoSkipped = onVideoSkipped;
+    private readonly Action<string> onPlayerFailed = onPlayerFailed;
     private bool isPlayerReady;
 
     public PlaybackMode Mode { get; private set; }
@@ -78,7 +80,11 @@ class PlaybackController(IVideoPlayer player)
             case PlayerStateChanged { State: PlaybackState.Paused } paused when paused.LoadId == loadId:
                 Mode = PlaybackMode.Paused;
                 break;
-            case PlayerError error when error.LoadId == loadId: // Todo: LoadId가 null인, 플레이어가 터진 경우도 처리하기 
+            case PlayerError { LoadId: null } failure:
+                onPlayerFailed(failure.Message);
+                break;
+            case PlayerError error when error.LoadId == loadId:
+                onVideoSkipped(Current!);
                 Advance();
                 break;
         }

@@ -43,6 +43,7 @@ class App : IDisposable
     //UI
     private readonly SettingsPanel settings;
     private readonly AlertPopup alerts = new();
+    private readonly ToastPanel toasts = new();
     private readonly FallbackInput fallbackInput;
 
     private readonly IVideoPlayer player;
@@ -103,7 +104,7 @@ class App : IDisposable
         gl = new GL(new GlBindingsContext(main.Handle, glContext));
 
         player = CreatePlayer();
-        playback = new PlaybackController(player);
+        playback = new PlaybackController(player, video => toasts.Show($"영상이 건너뛰어졌습니다: {video.Title}"), OnPlayerFailed);
         fallbackInput = new FallbackInput(input => _ = AddFallbackAsync(input));
         SDL.GetWindowSizeInPixels(video.Handle, out int videoWidth, out int videoHeight);
         player.Resize(videoWidth, videoHeight);
@@ -116,20 +117,9 @@ class App : IDisposable
         services = collection.BuildServiceProvider();
 
         var httpClientFactory = services.GetRequiredService<IHttpClientFactory>();
-        chat = new ChatService(httpClientFactory, inbox.Post, OnChat, alerts.Show);
+        chat = new ChatService(httpClientFactory, inbox.Post, OnChat, alerts.Show, log.Write, alerts.Show);
         resolver = new VideoResolver(httpClientFactory);
         settings = new SettingsPanel(chat);
-
-        _ = Task.Run(async () =>//임시 테스트 요청
-        {
-            foreach (string id in new[] { "oucIenRenTY", "rCvKr6nsS3w", "eTplxWaAD8o", "zb_0xMwJ6B8", "rCvKr6nsS3w"})
-            {
-                VideoInfo info = await resolver.GetVideoInfoAsync(id, CancellationToken.None)
-                    ?? new VideoInfo(id, id, TimeSpan.Zero, false);
-
-                inbox.Post(() => playback.Enqueue(info));
-            }
-        });
     }
 
     private IVideoPlayer CreatePlayer()
@@ -140,6 +130,13 @@ class App : IDisposable
 #else
         throw new PlatformNotSupportedException("No video player backend for this platform.");
 #endif
+    }
+
+    private void OnPlayerFailed(string reason)
+    {
+        string message = $"플레이어를 시작할 수 없습니다:\n{reason}";
+        alerts.Show(message);
+        log.Write(message);
     }
 
     private void OnChat(ChatMessage message)//임시형태
@@ -161,14 +158,14 @@ class App : IDisposable
             inbox.Post(() =>
             {
                 if (info == null)
-                    return;
-
-                playback.Enqueue(info);
+                    toasts.Show($"영상을 찾을 수 없습니다: {input}");
+                else
+                    playback.Enqueue(info);
             });
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            inbox.Post(() => alerts.Show(ex.Message));
+            inbox.Post(() => toasts.Show($"영상 조회에 실패했습니다: {input}"));
         }
     }
 
@@ -180,14 +177,14 @@ class App : IDisposable
             inbox.Post(() =>
             {
                 if (info == null)
-                    alerts.Show($"Video not found: {input}");
+                    toasts.Show($"영상을 찾을 수 없습니다: {input}");
                 else
                     playback.AddFallback(info);
             });
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            inbox.Post(() => alerts.Show(ex.Message));
+            inbox.Post(() => toasts.Show($"영상 조회에 실패했습니다: {input}"));
         }
     }
 
@@ -238,7 +235,9 @@ class App : IDisposable
 
         DrawMenuBar();
         DrawMainView();
+
         settings.Draw();
+        toasts.Draw();
 
         ImGui.Render();
         ImGui.EndFrame();
