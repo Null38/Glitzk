@@ -116,13 +116,13 @@ class App : IDisposable
         services = collection.BuildServiceProvider();
 
         var httpClientFactory = services.GetRequiredService<IHttpClientFactory>();
-        chat = new ChatService(httpClientFactory, inbox, OnChat, alerts.Show);
+        chat = new ChatService(httpClientFactory, inbox.Post, OnChat, alerts.Show);
         resolver = new VideoResolver(httpClientFactory);
         settings = new SettingsPanel(chat);
 
         _ = Task.Run(async () =>//임시 테스트 요청
         {
-            foreach (string id in new[] {"oucIenRenTY", "rCvKr6nsS3w", "eTplxWaAD8o", "zb_0xMwJ6B8", "rCvKr6nsS3w"})
+            foreach (string id in new[] { "oucIenRenTY", "rCvKr6nsS3w", "eTplxWaAD8o", "zb_0xMwJ6B8", "rCvKr6nsS3w"})
             {
                 VideoInfo info = await resolver.GetVideoInfoAsync(id, CancellationToken.None)
                     ?? new VideoInfo(id, id, TimeSpan.Zero, false);

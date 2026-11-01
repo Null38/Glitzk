@@ -11,7 +11,10 @@ public class WebView2VideoPlayer : IVideoPlayer
 
     private const string VirtualOrigin = "https://glitzk.local";
     private const string PlayerUrl = VirtualOrigin + "/player.html";
-    private const int ProgressIntervalMs = 500;
+
+    private const string DisableLoopScript = """
+        document.addEventListener('playing', e => { e.target.loop = false; }, true);
+        """;
 
     private static readonly string ShellHtml = $$"""
         <!DOCTYPE html>
@@ -48,11 +51,6 @@ public class WebView2VideoPlayer : IVideoPlayer
             function onPlayerStateChange(e) {
                 post({ type: 'state', loadId: loadId, state: e.data });
             }
-
-            setInterval(function () {
-                if (player && player.getPlayerState && player.getPlayerState() === YT.PlayerState.PLAYING)
-                    post({ type: 'progress', loadId: loadId, position: player.getCurrentTime(), duration: player.getDuration() });
-            }, {{ProgressIntervalMs}});
 
             window.loadVideo = function (videoId, newLoadId) {
                 loadId = newLoadId;
@@ -110,6 +108,7 @@ public class WebView2VideoPlayer : IVideoPlayer
                 core.AddWebResourceRequestedFilter(PlayerUrl, CoreWebView2WebResourceContext.All);
                 core.WebResourceRequested += OnWebResourceRequested;
                 core.WebMessageReceived += OnWebMessageReceived;
+                _ = core.AddScriptToExecuteOnDocumentCreatedAsync(DisableLoopScript);
                 core.Navigate(PlayerUrl);
 
                 state = InitState.Created;
@@ -169,8 +168,6 @@ public class WebView2VideoPlayer : IVideoPlayer
                 3 => PlaybackState.Buffering,
                 var state => throw new InvalidOperationException($"Unknown YouTube player state {state}"),
             }),
-            "progress" => new PlayerProgress(LoadId(),
-                root.GetProperty("position").GetDouble(), root.GetProperty("duration").GetDouble()),
             "error" => new PlayerError(LoadId(), $"YouTube player error {root.GetProperty("code").GetInt32()}"),
             var type => throw new InvalidOperationException($"Unknown player message type '{type}'"),
         };

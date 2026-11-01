@@ -19,7 +19,7 @@ class ChatService
 {
     private const string RedirectUri = "http://localhost:8080/api/path/";
 
-    private readonly Inbox inbox;
+    private readonly Action<Action> post;
     private readonly Action<ChatMessage> onChat;
     private readonly Action<string> onError;
     private readonly IHttpClientFactory httpClientFactory;
@@ -34,10 +34,10 @@ class ChatService
     public string ClientId => credentials.ClientId;
     public string ClientSecret => credentials.ClientSecret;
 
-    public ChatService(IHttpClientFactory httpClientFactory, Inbox inbox, Action<ChatMessage> onChat, Action<string> onError)
+    public ChatService(IHttpClientFactory httpClientFactory, Action<Action> post, Action<ChatMessage> onChat, Action<string> onError)
     {
         this.httpClientFactory = httpClientFactory;
-        this.inbox = inbox;
+        this.post = post;
         this.onChat = onChat;
         this.onError = onError;
 
@@ -104,7 +104,7 @@ class ChatService
             await connecting.SubscribeEventAsync(user, EventType.Chat, ct);
 
             ChzzkSession connected = connecting;
-            inbox.Post(() =>
+            post(() =>
             {
                 if (ct.IsCancellationRequested)
                 {
@@ -119,7 +119,7 @@ class ChatService
         catch (Exception ex)
         {
             _ = connecting?.DisconnectAsync(CancellationToken.None);
-            inbox.Post(() =>
+            post(() =>
             {
                 if (!ct.IsCancellationRequested)
                     Fail(ex.Message);
@@ -133,7 +133,7 @@ class ChatService
 
         target.ChatReceived += chat =>
         {
-            inbox.Post(() =>
+            post(() =>
             {
                 if (!ct.IsCancellationRequested)
                     onChat(new ChatMessage(chat.SenderChannelId, chat.Profile.Nickname, chat.Content));
@@ -143,7 +143,7 @@ class ChatService
 
         target.Disconnected += reason =>
         {
-            inbox.Post(() =>
+            post(() =>
             {
                 if (!ct.IsCancellationRequested)
                     Fail($"채팅 연결이 끊겼습니다: {reason}");
@@ -155,7 +155,7 @@ class ChatService
         {
             if (change.MessageType == SystemMessageType.Revoked)
             {
-                inbox.Post(() =>
+                post(() =>
                 {
                     if (!ct.IsCancellationRequested)
                         Fail("채팅 구독이 해제되었습니다.");
@@ -173,7 +173,7 @@ class ChatService
         timeout.CancelAfter(TimeSpan.FromMinutes(10));
 
         var codeTask = ChzzkClient.WaitForAuthCodeAsync(RedirectUri, state, ct: timeout.Token);
-        inbox.Post(() => SDL.OpenURL(authUrl));
+        post(() => SDL.OpenURL(authUrl));
 
         string code;
         try
@@ -220,7 +220,7 @@ class ChatService
 
     private void PostTokens(ChzzkUser.ChzzkToken token)
     {
-        inbox.Post(() => SaveCredentials(credentials with
+        post(() => SaveCredentials(credentials with
         {
             AccessToken = token.AccessToken,
             RefreshToken = token.RefreshToken
