@@ -1,15 +1,23 @@
 using Glitzk.Services;
 using Hexa.NET.ImGui;
+using System.Numerics;
 
 namespace Glitzk.UI;
 
 class SettingsPanel(ChatService chat)
 {
+    private enum SettingsCategory { /*영상 재생 관련 ,*/Chzzk, Debug }
+
     private const int CredentialBufferSize = 128;
+    private const float SidebarWidth = 140f;
+    private const float SidebarMinWidth = 30f;
+    private const float ContentMinWidth = 100f;
+    private const float MinWindowWidth = 180f;
 
     private string clientId = chat.ClientId;
     private string clientSecret = chat.ClientSecret;
     private bool isOpen;
+    private SettingsCategory selectedCategory;
 
     public string ClientId => clientId;
     public string ClientSecret => clientSecret;
@@ -21,20 +29,78 @@ class SettingsPanel(ChatService chat)
         if (!isOpen)
             return;
 
-        if (ImGui.Begin("Settings", ref isOpen))
+        ImGui.SetNextWindowSizeConstraints(new Vector2(MinWindowWidth, 0), new Vector2(float.MaxValue, float.MaxValue));
+
+        bool isVisible = ImGui.Begin("Settings", ref isOpen);
+
+        if (isVisible)
         {
-            ImGui.BeginDisabled(chat.Status != ChatStatus.Disconnected);
-
-            // Todo: 여기에 치지직 개발자 센터 여는 OpenUrl()두기
-
-            ImGui.Text("Chzzk Client Id");
-            ImGui.InputText("##Client ID", ref clientId, CredentialBufferSize);
-
-            ImGui.Text("Chzzk Client Secret");
-            ImGui.InputText("##Client Secret", ref clientSecret, CredentialBufferSize, ImGuiInputTextFlags.Password);
-
-            ImGui.EndDisabled();
+            DrawSidebar();
+            ImGui.SameLine();
+            DrawContent();
         }
         ImGui.End();
+    }
+
+    private void DrawSidebar()
+    {
+        ImGui.PushStyleColor(ImGuiCol.ChildBg, ImGui.GetColorU32(ImGuiCol.MenuBarBg));
+        float sidebarMaxWidth = ImGui.GetContentRegionAvail().X - ContentMinWidth;
+        ImGui.SetNextWindowSizeConstraints(new Vector2(SidebarMinWidth, 0), new Vector2(sidebarMaxWidth, float.MaxValue));
+        ImGui.BeginChild("Sidebar", new Vector2(SidebarWidth, 0), ImGuiChildFlags.AlwaysUseWindowPadding | ImGuiChildFlags.ResizeX);
+
+        foreach (var category in Enum.GetValues<SettingsCategory>())
+        {
+            if (ImGui.Selectable(category.ToString(), selectedCategory == category))
+                selectedCategory = category;
+        }
+
+        ImGui.EndChild();
+        ImGui.PopStyleColor();
+    }
+
+    private void DrawContent()
+    {
+        ImGui.BeginChild("Content", Vector2.Zero, ImGuiChildFlags.AlwaysUseWindowPadding);
+
+        switch (selectedCategory)
+        {
+            case SettingsCategory.Chzzk:
+                DrawChzzk();
+                break;
+            case SettingsCategory.Debug:
+                DrawDebug();
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(selectedCategory), selectedCategory, null);
+        }
+
+        ImGui.EndChild();
+    }
+
+    // Todo: 
+    //  - 폴백 재생 중 신청 처리(즉시 끊기 / 끝까지 대기)
+    //  - 신청 길이 제한(0 = 제한 없음)
+
+    private void DrawChzzk()
+    {
+        ImGui.BeginDisabled(chat.Status != ChatStatus.Disconnected);
+
+        // Todo: 여기에 치지직 개발자 센터 여는 OpenUrl()두기
+
+        ImGui.Text("Chzzk Client Id");
+        ImGui.InputText("##Client ID", ref clientId, CredentialBufferSize);
+
+        ImGui.Text("Chzzk Client Secret");
+        ImGui.InputText("##Client Secret", ref clientSecret, CredentialBufferSize, ImGuiInputTextFlags.Password);
+
+        ImGui.EndDisabled();
+    }
+
+    private static void DrawDebug()
+    {
+        // Todo: 로컬 입력테스트
+        // Todo: 플레이어 초기화
+        ImGui.TextDisabled("No debug settings yet");
     }
 }
