@@ -11,7 +11,9 @@ namespace Glitzk.Services;
 
 enum ChatStatus { Disconnected, Connecting, Connected }
 
-record ChatMessage(string SenderId, string Nickname, string Content);
+record MessageInfo(string SenderId, string Nickname, long Time);
+
+record ChatMessage(MessageInfo Info, string Content);
 
 record Credentials(string ClientId, string ClientSecret, string? AccessToken, string? RefreshToken);
 
@@ -156,7 +158,7 @@ class ChatService
             post(() =>
             {
                 if (!ct.IsCancellationRequested)
-                    onChat(new ChatMessage(chat.SenderChannelId, chat.Profile.Nickname, chat.Content));
+                    onChat(new ChatMessage(new(chat.SenderChannelId, chat.Profile.Nickname, chat.MessageTime), chat.Content));
             });
             return Task.CompletedTask;
         };

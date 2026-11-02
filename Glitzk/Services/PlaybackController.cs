@@ -4,6 +4,8 @@ namespace Glitzk.Services;
 
 enum PlaybackMode { Idle, Paused, Running  }
 
+record VideoRequest(VideoInfo Video, MessageInfo? Info);
+
 class PlaybackController(IVideoPlayer player, Action<VideoInfo> onVideoSkipped, Action<string> onPlayerFailed)
 {
     private readonly IVideoPlayer player = player;
@@ -13,10 +15,10 @@ class PlaybackController(IVideoPlayer player, Action<VideoInfo> onVideoSkipped, 
 
     public PlaybackMode Mode { get; private set; }
 
-    public VideoInfo? Current { get; private set; }
+    public VideoRequest? Current { get; private set; }
     private int loadId;
 
-    public LinkedList<VideoInfo> Requests { get; } = new();
+    public LinkedList<VideoRequest> Requests { get; } = new();
 
     private readonly OrderedDictionary<VideoInfo, int> fallbacks = [];
 
@@ -48,10 +50,35 @@ class PlaybackController(IVideoPlayer player, Action<VideoInfo> onVideoSkipped, 
         player.Pause();
     }
 
-    public void Enqueue(VideoInfo info)
+    public void Enqueue(VideoInfo info, MessageInfo message)
     {
-        Requests.AddLast(info);
+        var request = new VideoRequest(info, message);
+
+        var previous = Requests.Last;
+        while (previous != null && previous.Value.Info!.Time > message.Time)
+            previous = previous.Previous;
+
+        if (previous != null)
+            Requests.AddAfter(previous, request);
+        else
+            Requests.AddFirst(request);
+
         AdvanceIfIdle();
+    }
+
+    public void RemoveRequest(LinkedListNode<VideoRequest> node) => Requests.Remove(node);
+
+    public void MoveRequest(LinkedListNode<VideoRequest> node, LinkedListNode<VideoRequest>? before)
+    {
+        if (node == before)
+            return;
+
+        Requests.Remove(node);
+
+        if (before != null)
+            Requests.AddBefore(before, node);
+        else
+            Requests.AddLast(node);
     }
 
     public void AddFallback(VideoInfo info)
@@ -84,7 +111,7 @@ class PlaybackController(IVideoPlayer player, Action<VideoInfo> onVideoSkipped, 
                 onPlayerFailed(failure.Message);
                 break;
             case PlayerError error when error.LoadId == loadId:
-                onVideoSkipped(Current!);
+                onVideoSkipped(Current!.Video);
                 Advance();
                 break;
         }
@@ -101,7 +128,7 @@ class PlaybackController(IVideoPlayer player, Action<VideoInfo> onVideoSkipped, 
         if (!isPlayerReady)
             return;
 
-        VideoInfo? next = Requests.First?.Value;
+        VideoRequest? next = Requests.First?.Value;
 
         if (next != null)
             Requests.RemoveFirst();
@@ -117,11 +144,11 @@ class PlaybackController(IVideoPlayer player, Action<VideoInfo> onVideoSkipped, 
         Current = next;
         Mode = PlaybackMode.Running;
 
-        player.Load(next.Id, ++loadId);
+        player.Load(next.Video.Id, ++loadId);
 
     }
 
-    private VideoInfo? PickRandomFallback()
+    private VideoRequest? PickRandomFallback()
     {
         if (fallbacks.Count == 0)
             return null;
@@ -141,6 +168,6 @@ class PlaybackController(IVideoPlayer player, Action<VideoInfo> onVideoSkipped, 
         }
 
         fallbacks[next.Key]++;
-        return next.Key;
+        return new VideoRequest(next.Key, null);
     }
 }

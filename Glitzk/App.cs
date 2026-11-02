@@ -25,7 +25,7 @@ class App : IDisposable
     private const int MinWindowWidth = 200;
     private const int MinWindowHeight = 75;
 
-    private const float BackgroundBrightness = 25 / 255f;
+    internal const float BackgroundBrightness = 25 / 255f;
     private const float FontSize = 18f;
     private const float SectionMaxWidth = 500f;
 
@@ -147,10 +147,10 @@ class App : IDisposable
         if (parts.Length < 2 || parts[0] != "!sr")
             return;
 
-        _ = RequestAsync(parts[1]);
+        _ = RequestAsync(parts[1], message.Info);
     }
 
-    private async Task RequestAsync(string input)//임시형태
+    private async Task RequestAsync(string input, MessageInfo message)//임시형태
     {
         try
         {
@@ -160,7 +160,7 @@ class App : IDisposable
                 if (info == null)
                     toasts.Show($"영상을 찾을 수 없습니다: {input}");
                 else
-                    playback.Enqueue(info);
+                    playback.Enqueue(info, message);
             });
         }
         catch (Exception)
@@ -308,7 +308,7 @@ class App : IDisposable
                 chat.Disconnect();
         }
 
-        VideoListPanel.DrawRequests(playback.Requests, sectionWidth);
+        VideoListPanel.DrawRequests(playback.Requests, playback.RemoveRequest, playback.MoveRequest, sectionWidth);
 
         ImGui.EndGroup();
 
