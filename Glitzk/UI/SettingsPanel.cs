@@ -4,9 +4,9 @@ using System.Numerics;
 
 namespace Glitzk.UI;
 
-class SettingsPanel(ChatService chat)
+class SettingsPanel(ChatService chat, PlaybackSettings playbackSettings)
 {
-    private enum SettingsCategory { /*영상 재생 관련 ,*/Chzzk, Debug }
+    private enum SettingsCategory { Playback, Chzzk, Debug }
 
     private const int CredentialBufferSize = 128;
     private const float SidebarWidth = 140f;
@@ -65,6 +65,9 @@ class SettingsPanel(ChatService chat)
 
         switch (selectedCategory)
         {
+            case SettingsCategory.Playback:
+                DrawPlayback();
+                break;
             case SettingsCategory.Chzzk:
                 DrawChzzk();
                 break;
@@ -78,9 +81,16 @@ class SettingsPanel(ChatService chat)
         ImGui.EndChild();
     }
 
-    // Todo: 
-    //  - 폴백 재생 중 신청 처리(즉시 끊기 / 끝까지 대기)
-    //  - 신청 길이 제한(0 = 제한 없음)
+    private void DrawPlayback()
+    {
+        ImGui.Checkbox("풀백 스킵", ref playbackSettings.IsFallbackInterruptEnabled);
+        ImGui.SetItemTooltip("자동 재생목록의 영상이 재생 중일 때 신청이 들어오면,\n 해당 신청 영상을 즉시 재생합니다.");
+
+        ImGui.Text("신청 영상 최대 길이 (분 단위, 0 = 제한 없음)");
+        int maxMinutes = (int)playbackSettings.MaxRequestDuration.TotalMinutes;
+        if (ImGui.InputInt("##Max Request Minutes", ref maxMinutes))
+            playbackSettings.MaxRequestDuration = TimeSpan.FromMinutes(Math.Max(0, maxMinutes));
+    }
 
     private void DrawChzzk()
     {
@@ -97,10 +107,10 @@ class SettingsPanel(ChatService chat)
         ImGui.EndDisabled();
     }
 
-    private static void DrawDebug()
+    private void DrawDebug()
     {
         // Todo: 로컬 입력테스트
         // Todo: 플레이어 초기화
-        ImGui.TextDisabled("No debug settings yet");
+        ImGui.Checkbox("Skip search results without length", ref playbackSettings.IsSearchLengthFilterEnabled);
     }
 }

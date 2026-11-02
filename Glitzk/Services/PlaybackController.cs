@@ -6,9 +6,10 @@ enum PlaybackMode { Idle, Paused, Running  }
 
 record VideoRequest(VideoInfo Video, MessageInfo? Info);
 
-class PlaybackController(IVideoPlayer player, Action<VideoInfo> onVideoSkipped, Action<string> onPlayerFailed)
+class PlaybackController(IVideoPlayer player, PlaybackSettings settings, Action<VideoInfo> onVideoSkipped, Action<string> onPlayerFailed)
 {
     private readonly IVideoPlayer player = player;
+    private readonly PlaybackSettings settings = settings;
     private readonly Action<VideoInfo> onVideoSkipped = onVideoSkipped;
     private readonly Action<string> onPlayerFailed = onPlayerFailed;
     private bool isPlayerReady;
@@ -63,7 +64,13 @@ class PlaybackController(IVideoPlayer player, Action<VideoInfo> onVideoSkipped, 
         else
             Requests.AddFirst(request);
 
-        AdvanceIfIdle();
+        // Paused is excluded: Advance() would resume playback the streamer stopped.
+        bool isInterruptingFallback = settings.IsFallbackInterruptEnabled
+            && Mode == PlaybackMode.Running
+            && Current?.Info == null;
+
+        if (Mode == PlaybackMode.Idle || isInterruptingFallback)
+            Advance();
     }
 
     public void RemoveRequest(LinkedListNode<VideoRequest> node) => Requests.Remove(node);

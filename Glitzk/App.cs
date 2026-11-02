@@ -48,6 +48,7 @@ class App : IDisposable
 
     private readonly IVideoPlayer player;
     private readonly PlaybackController playback;
+    private readonly PlaybackSettings playbackSettings = new();
 
     private readonly nint glContext;
     private readonly GL gl;
@@ -104,8 +105,8 @@ class App : IDisposable
         gl = new GL(new GlBindingsContext(main.Handle, glContext));
 
         player = CreatePlayer();
-        playback = new PlaybackController(player, video => toasts.Show($"영상이 건너뛰어졌습니다: {video.Title}"), OnPlayerFailed);
-        fallbackInput = new FallbackInput(input => _ = AddFallbackAsync(input));
+        playback = new PlaybackController(player, playbackSettings, video => toasts.Show($"재생할 수 없어 건너뛰었습니다: {video.Title}"), OnPlayerFailed);
+        fallbackInput = new FallbackInput(input => _ = ResolveAsync(input, playback.AddFallback));
         SDL.GetWindowSizeInPixels(video.Handle, out int videoWidth, out int videoHeight);
         player.Resize(videoWidth, videoHeight);
 
@@ -119,7 +120,7 @@ class App : IDisposable
         var httpClientFactory = services.GetRequiredService<IHttpClientFactory>();
         chat = new ChatService(httpClientFactory, inbox.Post, OnChat, alerts.Show, log.Write, alerts.Show);
         resolver = new VideoResolver(httpClientFactory);
-        settings = new SettingsPanel(chat);
+        settings = new SettingsPanel(chat, playbackSettings);
     }
 
     private IVideoPlayer CreatePlayer()
@@ -147,39 +148,34 @@ class App : IDisposable
         if (parts.Length < 2 || parts[0] != "!sr")
             return;
 
-        _ = RequestAsync(parts[1], message.Info);
+        _ = ResolveAsync(parts[1], info => EnqueueRequest(info, message.Info));
     }
 
-    private async Task RequestAsync(string input, MessageInfo message)//임시형태
+    private void EnqueueRequest(VideoInfo info, MessageInfo message)
+    {
+        TimeSpan maxDuration = playbackSettings.MaxRequestDuration;
+        if (maxDuration > TimeSpan.Zero && info.Duration > maxDuration)
+        {
+            string title = info.Title.Length > 8 ? $"{info.Title[..8]}..." : info.Title;
+            toasts.Show($"영상이 길이 제한 {maxDuration.TotalMinutes}분을 넘습니다: {title} ({info.DurationString()})"); // 임시. 나중에 채팅 반환으로 넘기기
+        }
+        else
+            playback.Enqueue(info, message);
+    }
+
+    private async Task ResolveAsync(string input, Action<VideoInfo> onResolved)
     {
         try
         {
-            VideoInfo? info = await resolver.ResolveAsync(input, CancellationToken.None);
+            VideoInfo? info = await resolver.ResolveAsync(input, playbackSettings.IsSearchLengthFilterEnabled, CancellationToken.None);
             inbox.Post(() =>
             {
                 if (info == null)
-                    toasts.Show($"영상을 찾을 수 없습니다: {input}");
+                    toasts.Show($"영상을 찾을 수 없습니다: {input}"); // 임시. 나중에 채팅 반환으로 넘기기 
+                else if (info.IsLive)
+                    toasts.Show($"라이브/예정 방송은 추가할 수 없습니다: {info.Title}"); // 임시. 나중에 채팅 반환으로 넘기기 
                 else
-                    playback.Enqueue(info, message);
-            });
-        }
-        catch (Exception)
-        {
-            inbox.Post(() => toasts.Show($"영상 조회에 실패했습니다: {input}"));
-        }
-    }
-
-    private async Task AddFallbackAsync(string input)
-    {
-        try
-        {
-            VideoInfo? info = await resolver.ResolveAsync(input, CancellationToken.None);
-            inbox.Post(() =>
-            {
-                if (info == null)
-                    toasts.Show($"영상을 찾을 수 없습니다: {input}");
-                else
-                    playback.AddFallback(info);
+                    onResolved(info);
             });
         }
         catch (Exception)

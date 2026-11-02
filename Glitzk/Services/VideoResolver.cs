@@ -24,10 +24,10 @@ partial class VideoResolver(IHttpClientFactory httpClientFactory)
     [GeneratedRegex(@"(?:youtube\.com/(?:watch\?(?:.*&)?v=|embed/|shorts/)|youtu\.be/)([a-zA-Z0-9_-]{11})", RegexOptions.IgnoreCase)]
     private static partial Regex UrlPattern();
 
-    public async Task<VideoInfo?> ResolveAsync(string input, CancellationToken ct)
+    public async Task<VideoInfo?> ResolveAsync(string input, bool isLengthFilterEnabled, CancellationToken ct)
     {
         if (!TryExtractVideoId(input, out string? videoId))
-            videoId = await SearchVideoIdAsync(input, ct);
+            videoId = await SearchVideoIdAsync(input, isLengthFilterEnabled, ct);
 
         if (videoId == null)
             return null;
@@ -70,7 +70,7 @@ partial class VideoResolver(IHttpClientFactory httpClientFactory)
         }
     };
 
-    private async Task<string?> SearchVideoIdAsync(string keyword, CancellationToken ct)
+    private async Task<string?> SearchVideoIdAsync(string keyword, bool isLengthFilterEnabled, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(keyword))
             return null;
@@ -80,7 +80,7 @@ partial class VideoResolver(IHttpClientFactory httpClientFactory)
         if (!TryGetSearchSections(response.RootElement, out JsonElement sections))
             return null;
 
-        return FindFirstVideoId(sections);
+        return FindFirstVideoId(sections, isLengthFilterEnabled);
     }
 
     public async Task<VideoInfo?> GetVideoInfoAsync(string videoId, CancellationToken ct)
@@ -116,7 +116,7 @@ partial class VideoResolver(IHttpClientFactory httpClientFactory)
             && sectionList.TryGetProperty("contents", out sections);
     }
 
-    private static string? FindFirstVideoId(JsonElement sections)
+    private static string? FindFirstVideoId(JsonElement sections, bool isLengthFilterEnabled)
     {
         foreach (JsonElement section in sections.EnumerateArray())
         {
@@ -127,34 +127,12 @@ partial class VideoResolver(IHttpClientFactory httpClientFactory)
             foreach (JsonElement item in items.EnumerateArray())
             {
                 if (item.TryGetProperty("videoRenderer", out JsonElement video)
-                    && !IsLiveOrUpcoming(video)
+                    && (!isLengthFilterEnabled || video.TryGetProperty("lengthText", out _)) // Heuristic live/upcoming check: such results appear to have no lengthText
                     && video.TryGetProperty("videoId", out JsonElement videoId))
                     return videoId.GetString();
             }
         }
 
         return null;
-    }
-
-    private static bool IsLiveOrUpcoming(JsonElement video)
-    {
-        if (video.TryGetProperty("upcomingEventData", out _))
-            return true;
-
-        if (!video.TryGetProperty("thumbnailOverlays", out JsonElement overlays))
-            return false;
-
-        foreach (JsonElement overlay in overlays.EnumerateArray())
-        {
-            if (!overlay.TryGetProperty("thumbnailOverlayTimeStatusRenderer", out JsonElement timeStatus)
-                || !timeStatus.TryGetProperty("style", out JsonElement style))
-                continue;
-
-            string? styleValue = style.GetString();
-            if (styleValue == "LIVE" || styleValue == "UPCOMING")
-                return true;
-        }
-
-        return false;
     }
 }
