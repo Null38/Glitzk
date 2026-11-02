@@ -1,5 +1,6 @@
 using Microsoft.Web.WebView2.Core;
 using System.Drawing;
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 
@@ -131,6 +132,15 @@ public class WebView2VideoPlayer : IVideoPlayer
     public void Stop() => Execute("player.stopVideo()");
 
     void IVideoPlayer.ApplyVolume(int volume) => Execute($"player.setVolume({volume})");
+
+    public async Task<int?> ReadVolumeAsync(CancellationToken ct)
+    {
+        if (controller == null)
+            return null;
+
+        string result = await controller.CoreWebView2.ExecuteScriptAsync("player.getVolume()").WaitAsync(ct);
+        return int.TryParse(result, CultureInfo.InvariantCulture, out int volume) ? volume : null;
+    }
 
     private void Execute(string script) => _ = controller!.CoreWebView2.ExecuteScriptAsync(script);
 

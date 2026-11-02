@@ -22,5 +22,7 @@ public interface IVideoPlayer : IDisposable
 
     protected void ApplyVolume(int volume);
 
+    Task<int?> ReadVolumeAsync(CancellationToken ct);
+
     void Resize(int width, int height);
 }

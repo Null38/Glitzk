@@ -13,6 +13,7 @@ class PlaybackController(IVideoPlayer player, PlaybackSettings settings, Action<
     private readonly Action<VideoInfo> onVideoSkipped = onVideoSkipped;
     private readonly Action<string> onPlayerFailed = onPlayerFailed;
     private bool isPlayerReady;
+    private int? savedVolume;
 
     public PlaybackMode Mode { get; private set; }
 
@@ -28,13 +29,15 @@ class PlaybackController(IVideoPlayer player, PlaybackSettings settings, Action<
 
     public IReadOnlyList<VideoInfo> Fallbacks => fallbacks.Keys;
 
-    public void Restore(IEnumerable<VideoRequest> savedRequests, IEnumerable<VideoInfo> savedFallbacks)
+    public void Restore(IEnumerable<VideoRequest> savedRequests, IEnumerable<VideoInfo> savedFallbacks, int? volume)
     {
         foreach (VideoRequest request in savedRequests)
             Requests.AddLast(request);
 
         foreach (VideoInfo info in savedFallbacks)
             fallbacks.TryAdd(info, 0);
+
+        savedVolume = volume;
     }
 
     public void Play()
@@ -116,6 +119,8 @@ class PlaybackController(IVideoPlayer player, PlaybackSettings settings, Action<
         {
             case PlayerReady:
                 isPlayerReady = true;
+                if (savedVolume is int volume)
+                    player.SetVolume(volume);
                 break;
             case PlayerStateChanged { State: PlaybackState.Ended } ended when ended.LoadId == loadId:
                 Advance();

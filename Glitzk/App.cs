@@ -30,6 +30,7 @@ class App : IDisposable
     private const float SectionMaxWidth = 500f;
 
     private const uint MinimizedDelayMs = 16;
+    private static readonly TimeSpan VolumeReadTimeout = TimeSpan.FromSeconds(2);
 
     private readonly AppWindow main;
     private readonly AppWindow video;
@@ -118,7 +119,7 @@ class App : IDisposable
 
         player = CreatePlayer();
         playback = new PlaybackController(player, playbackSettings, video => toasts.Show($"재생할 수 없어 건너뛰었습니다: {video.Title}"), OnPlayerFailed);
-        playback.Restore(persistence.LoadQueue(), savedSettings.Fallbacks);
+        playback.Restore(persistence.LoadQueue(), savedSettings.Fallbacks, savedSettings.Volume);
         fallbackInput = new FallbackInput(input => _ = ResolveAsync(input, playback.AddFallback));
         SDL.GetWindowSizeInPixels(video.Handle, out int videoWidth, out int videoHeight);
         player.Resize(videoWidth, videoHeight);
@@ -140,10 +141,18 @@ class App : IDisposable
     {
 #if WINDOWS
         nint hwnd = SDL.GetPointerProperty(SDL.GetWindowProperties(video.Handle), SDL.Props.WindowWin32HWNDPointer, nint.Zero);
-        return new WebView2VideoPlayer(hwnd, e => inbox.Post(() => playback.OnPlayerEvent(e)));
+        return new WebView2VideoPlayer(hwnd, e => inbox.Post(() => OnPlayerEvent(e)));
 #else
         throw new PlatformNotSupportedException("No video player backend for this platform.");
 #endif
+    }
+
+    private void OnPlayerEvent(PlayerEvent e)
+    {
+        playback.OnPlayerEvent(e);
+
+        if (e is PlayerReady && playbackSettings.IsAutoPlayEnabled && chat.Status == ChatStatus.Connected)
+            playback.AdvanceIfIdle();
     }
 
     private void OnPlayerFailed(string reason)
@@ -354,6 +363,25 @@ class App : IDisposable
     }
 
     #endregion Draw
+    
+    private void ReadVolumeBeforeExit()
+    {
+        ImGui.DestroyPlatformWindows();
+        SDL.HideWindow(video.Handle);
+        SDL.HideWindow(main.Handle);
+
+        using var timeout = new CancellationTokenSource(VolumeReadTimeout);
+        Task<int?> reading = player.ReadVolumeAsync(timeout.Token);
+
+        while (!reading.IsCompleted)
+        {
+            while (SDL.PollEvent(out _)) { }
+            SDL.Delay(MinimizedDelayMs);
+        }
+
+        if (reading.IsCompletedSuccessfully && reading.Result is int volume)
+            savedSettings.Volume = volume;
+    }
 
     unsafe private void LoadFont()
     {
@@ -372,6 +400,7 @@ class App : IDisposable
     public void Dispose()
     {
         chat.Disconnect();
+        ReadVolumeBeforeExit();
 
         SaveSettings();
         persistence.SaveQueue(playback.UnplayedRequests);
