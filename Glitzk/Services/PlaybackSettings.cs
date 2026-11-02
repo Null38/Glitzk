@@ -5,4 +5,5 @@ class PlaybackSettings
     public TimeSpan MaxRequestDuration; // Zero = no limit
     public bool IsFallbackInterruptEnabled;
     public bool IsSearchLengthFilterEnabled = true;
+    public bool IsAutoPlayEnabled;
 }

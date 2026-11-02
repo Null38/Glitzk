@@ -21,9 +21,21 @@ class PlaybackController(IVideoPlayer player, PlaybackSettings settings, Action<
 
     public LinkedList<VideoRequest> Requests { get; } = new();
 
+    public IEnumerable<VideoRequest> UnplayedRequests =>
+        Mode != PlaybackMode.Idle && Current?.Info != null ? Requests.Prepend(Current) : Requests;
+
     private readonly OrderedDictionary<VideoInfo, int> fallbacks = [];
 
     public IReadOnlyList<VideoInfo> Fallbacks => fallbacks.Keys;
+
+    public void Restore(IEnumerable<VideoRequest> savedRequests, IEnumerable<VideoInfo> savedFallbacks)
+    {
+        foreach (VideoRequest request in savedRequests)
+            Requests.AddLast(request);
+
+        foreach (VideoInfo info in savedFallbacks)
+            fallbacks.TryAdd(info, 0);
+    }
 
     public void Play()
     {
@@ -118,13 +130,14 @@ class PlaybackController(IVideoPlayer player, PlaybackSettings settings, Action<
                 onPlayerFailed(failure.Message);
                 break;
             case PlayerError error when error.LoadId == loadId:
-                onVideoSkipped(Current!.Video);
+                if (Current is not null)
+                    onVideoSkipped(Current.Video);
                 Advance();
                 break;
         }
     }
 
-    private void AdvanceIfIdle()
+    public void AdvanceIfIdle()
     {
         if (Mode == PlaybackMode.Idle)
             Advance();

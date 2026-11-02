@@ -5,7 +5,6 @@ using ChzzkApi.Rule;
 using ChzzkApi.Session;
 using SDL3;
 using System.Net;
-using System.Text.Json;
 
 namespace Glitzk.Services;
 
@@ -26,6 +25,7 @@ class ChatService
     private readonly Action<string> onConnectFailed;
     private readonly Action<Exception> onSessionException;
     private readonly Action<string> onDisconnected;
+    private readonly Action onConnected;
     private readonly IHttpClientFactory httpClientFactory;
 
     private Credentials credentials;
@@ -35,20 +35,22 @@ class ChatService
 
     public ChatStatus Status { get; private set; }
 
+    public Credentials Credentials => credentials;
     public string ClientId => credentials.ClientId;
     public string ClientSecret => credentials.ClientSecret;
 
-    public ChatService(IHttpClientFactory httpClientFactory, Action<Action> post, 
-        Action<ChatMessage> onChat, Action<string> onConnectFailed, Action<Exception> onSessionException, Action<string> onDisconnected)
+    public ChatService(IHttpClientFactory httpClientFactory, Credentials credentials, Action<Action> post,
+        Action<ChatMessage> onChat, Action<string> onConnectFailed, Action<Exception> onSessionException, Action<string> onDisconnected, Action onConnected)
     {
         this.httpClientFactory = httpClientFactory;
+        this.credentials = credentials;
         this.post = post;
         this.onChat = onChat;
         this.onConnectFailed = onConnectFailed;
         this.onSessionException = onSessionException;
         this.onDisconnected = onDisconnected;
+        this.onConnected = onConnected;
 
-        credentials = TempSave.Load();
         client = new ChzzkClient(httpClientFactory, credentials.ClientId, credentials.ClientSecret);
         client.Rules.Add("TokenRefresh", RefreshTokenRule);
     }
@@ -57,7 +59,7 @@ class ChatService
     {
         if (clientId != credentials.ClientId || clientSecret != credentials.ClientSecret)
         {
-            SaveCredentials(new Credentials(clientId, clientSecret, null, null));
+            credentials = new Credentials(clientId, clientSecret, null, null);
             ApplyClientCredentials();
         }
 
@@ -115,6 +117,7 @@ class ChatService
 
                 session = connected;
                 Status = ChatStatus.Connected;
+                onConnected();
             });
         }
         catch (Exception ex)
@@ -248,35 +251,10 @@ class ChatService
 
     private void PostTokens(ChzzkUser.ChzzkToken token)
     {
-        post(() => SaveCredentials(credentials with
+        post(() => credentials = credentials with
         {
             AccessToken = token.AccessToken,
             RefreshToken = token.RefreshToken
-        }));
-    }
-
-    private void SaveCredentials(Credentials value)
-    {
-        credentials = value;
-        TempSave.Save(value);
-    }
-}
-
-static class TempSave// 임시
-{
-    private static readonly string CredentialsPath = Path.Combine(AppContext.BaseDirectory, ".data");
-
-    public static Credentials Load()
-    {
-        if (!File.Exists(CredentialsPath))
-            return new Credentials("", "", null, null);
-
-        return JsonSerializer.Deserialize<Credentials>(File.ReadAllText(CredentialsPath))
-            ?? new Credentials("", "", null, null);
-    }
-
-    public static void Save(Credentials value)
-    {
-        File.WriteAllText(CredentialsPath, JsonSerializer.Serialize(value));
+        });
     }
 }

@@ -12,6 +12,8 @@ class LogWriter : IDisposable
     private readonly Action<string> onError;
     private readonly Thread writer;
 
+    public bool IsEnabled;
+
     public LogWriter(Action<string> onError)
     {
         this.onError = onError;
@@ -44,6 +46,9 @@ class LogWriter : IDisposable
 
     public void Write(string message)
     {
+        if (!IsEnabled)
+            return;
+
         try
         {
             queue.Add((DateTimeOffset.Now, message));

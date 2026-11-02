@@ -4,7 +4,7 @@ using System.Numerics;
 
 namespace Glitzk.UI;
 
-class SettingsPanel(ChatService chat, PlaybackSettings playbackSettings)
+class SettingsPanel(ChatService chat, PlaybackSettings playbackSettings, LogWriter log)
 {
     private enum SettingsCategory { Playback, Chzzk, Debug }
 
@@ -83,6 +83,9 @@ class SettingsPanel(ChatService chat, PlaybackSettings playbackSettings)
 
     private void DrawPlayback()
     {
+        ImGui.Checkbox("자동 재생", ref playbackSettings.IsAutoPlayEnabled);
+        ImGui.SetItemTooltip("치지직 채팅에 연결되면 자동으로 영상을 재생합니다.");
+
         ImGui.Checkbox("풀백 스킵", ref playbackSettings.IsFallbackInterruptEnabled);
         ImGui.SetItemTooltip("자동 재생목록의 영상이 재생 중일 때 신청이 들어오면,\n 해당 신청 영상을 즉시 재생합니다.");
 
@@ -112,5 +115,6 @@ class SettingsPanel(ChatService chat, PlaybackSettings playbackSettings)
         // Todo: 로컬 입력테스트
         // Todo: 플레이어 초기화
         ImGui.Checkbox("Skip search results without length", ref playbackSettings.IsSearchLengthFilterEnabled);
+        ImGui.Checkbox("로그 저장", ref log.IsEnabled);
     }
 }

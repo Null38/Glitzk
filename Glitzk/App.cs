@@ -36,6 +36,8 @@ class App : IDisposable
 
     private readonly Inbox inbox = new();
     private readonly LogWriter log;
+    private readonly Persistence persistence;
+    private readonly SavedSettings savedSettings;
     private readonly ServiceProvider services;
     private readonly ChatService chat;
     private readonly VideoResolver resolver;
@@ -48,7 +50,7 @@ class App : IDisposable
 
     private readonly IVideoPlayer player;
     private readonly PlaybackController playback;
-    private readonly PlaybackSettings playbackSettings = new();
+    private readonly PlaybackSettings playbackSettings;
 
     private readonly nint glContext;
     private readonly GL gl;
@@ -57,6 +59,10 @@ class App : IDisposable
     public App()
     {
         log = new LogWriter(message => inbox.Post(() => alerts.Show(message)));
+        persistence = new Persistence(toasts.Show, log.Write);
+        savedSettings = persistence.LoadSettings();
+        playbackSettings = savedSettings.Playback;
+        log.IsEnabled = savedSettings.SaveLog;
 
         SDL.GLSetAttribute(SDL.GLAttr.ContextFlags, 0);
         SDL.GLSetAttribute(SDL.GLAttr.ContextProfileMask, (int)SDL.GLProfile.Core);
@@ -75,6 +81,12 @@ class App : IDisposable
 
         SDL.SetWindowMinimumSize(main.Handle, MinWindowWidth, MinWindowHeight);
         SDL.SetWindowParent(video.Handle, main.Handle);
+
+        var (mainBounds, videoBounds) = persistence.LoadWindows();
+        if (mainBounds != null)
+            main.Apply(mainBounds);
+        if (videoBounds != null)
+            video.Apply(videoBounds);
 
         if ((glContext = SDL.GLCreateContext(main.Handle)) == nint.Zero)
             throw new InvalidOperationException($"Error creating GL context: {SDL.GetError()}");
@@ -106,6 +118,7 @@ class App : IDisposable
 
         player = CreatePlayer();
         playback = new PlaybackController(player, playbackSettings, video => toasts.Show($"재생할 수 없어 건너뛰었습니다: {video.Title}"), OnPlayerFailed);
+        playback.Restore(persistence.LoadQueue(), savedSettings.Fallbacks);
         fallbackInput = new FallbackInput(input => _ = ResolveAsync(input, playback.AddFallback));
         SDL.GetWindowSizeInPixels(video.Handle, out int videoWidth, out int videoHeight);
         player.Resize(videoWidth, videoHeight);
@@ -118,9 +131,9 @@ class App : IDisposable
         services = collection.BuildServiceProvider();
 
         var httpClientFactory = services.GetRequiredService<IHttpClientFactory>();
-        chat = new ChatService(httpClientFactory, inbox.Post, OnChat, alerts.Show, log.Write, alerts.Show);
+        chat = new ChatService(httpClientFactory, savedSettings.Credentials, inbox.Post, OnChat, alerts.Show, log.Write, alerts.Show, OnChatConnected);
         resolver = new VideoResolver(httpClientFactory);
-        settings = new SettingsPanel(chat, playbackSettings);
+        settings = new SettingsPanel(chat, playbackSettings, log);
     }
 
     private IVideoPlayer CreatePlayer()
@@ -138,6 +151,22 @@ class App : IDisposable
         string message = $"플레이어를 시작할 수 없습니다:\n{reason}";
         alerts.Show(message);
         log.Write(message);
+    }
+
+    private void SaveSettings()
+    {
+        savedSettings.Credentials = chat.Credentials;
+        savedSettings.Fallbacks = [.. playback.Fallbacks];
+        savedSettings.SaveLog = log.IsEnabled;
+        persistence.SaveSettings(savedSettings);
+    }
+
+    private void OnChatConnected()
+    {
+        SaveSettings();
+
+        if (playbackSettings.IsAutoPlayEnabled)
+            playback.AdvanceIfIdle();
     }
 
     private void OnChat(ChatMessage message)//임시형태
@@ -282,7 +311,8 @@ class App : IDisposable
             | ImGuiWindowFlags.NoMove
             | ImGuiWindowFlags.NoBackground
             | ImGuiWindowFlags.NoBringToFrontOnFocus
-            | ImGuiWindowFlags.NoNavFocus);
+            | ImGuiWindowFlags.NoNavFocus
+            | ImGuiWindowFlags.NoSavedSettings);
 
         string label = chat.Status switch
         {
@@ -342,6 +372,11 @@ class App : IDisposable
     public void Dispose()
     {
         chat.Disconnect();
+
+        SaveSettings();
+        persistence.SaveQueue(playback.UnplayedRequests);
+        persistence.SaveWindows(main.Bounds, video.Bounds);
+
         services.Dispose();
         player.Dispose();
 

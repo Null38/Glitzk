@@ -29,6 +29,8 @@ partial class AppWindow
         }
     }
 
+    public WindowBounds Bounds => new(Position.X, Position.Y, Size.Width, Size.Height);
+
     public AppWindow(string title, int width, int height, SDL.WindowFlags flags)
     {
         Handle = SDL.CreateWindow(title, width, height, flags);
@@ -36,6 +38,12 @@ partial class AppWindow
             throw new InvalidOperationException($"Error creating window '{title}': {SDL.GetError()}");
 
         Id = SDL.GetWindowID(Handle);
+    }
+
+    public void Apply(WindowBounds bounds)
+    {
+        SDL.SetWindowPosition(Handle, bounds.X, bounds.Y);
+        SDL.SetWindowSize(Handle, bounds.Width, bounds.Height);
     }
 
 #if WINDOWS
