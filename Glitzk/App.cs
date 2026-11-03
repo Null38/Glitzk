@@ -138,7 +138,7 @@ class App : IDisposable
         chat = new ChatService(httpClientFactory, savedSettings.Credentials, inbox.Post, OnChat, alerts.Show, log.Write, alerts.Show, OnChatConnected);
         resolver = new VideoResolver(httpClientFactory);
         LoadCommands();
-        settings = new SettingsPanel(chat, playbackSettings, log);
+        settings = new SettingsPanel(chat, playbackSettings, log, commands, commandsByTrigger);
     }
 
     private void LoadCommands()
