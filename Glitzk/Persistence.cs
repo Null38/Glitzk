@@ -14,6 +14,7 @@ class SavedSettings
     public PlaybackSettings Playback = new();
     public List<VideoInfo> Fallbacks = [];
     public Dictionary<string, string> Commands = [];
+    public Dictionary<string, XElement> CommandOptions = [];
     public bool SaveLog;
     public int? Volume;
 }
@@ -97,6 +98,12 @@ partial class Persistence
                 settings.Commands[trigger] = command.Value;
         }
 
+        foreach (XElement options in root.Element("CommandOptions")?.Elements("Command") ?? [])
+        {
+            if ((string?)options.Attribute("name") is { Length: > 0 } name)
+                settings.CommandOptions[name] = options;
+        }
+
         return settings;
     }
 
@@ -129,6 +136,7 @@ partial class Persistence
             new XElement("SaveLog", settings.SaveLog),
             new XElement("Commands", settings.Commands.Select(command =>
                 new XElement("Command", new XAttribute("key", command.Key), command.Value))),
+            new XElement("CommandOptions", settings.CommandOptions.Values),
             new XElement("MaxRequestDuration", settings.Playback.MaxRequestDuration),
             new XElement("IsFallbackInterruptEnabled", settings.Playback.IsFallbackInterruptEnabled),
             new XElement("IsSearchLengthFilterEnabled", settings.Playback.IsSearchLengthFilterEnabled),

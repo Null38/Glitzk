@@ -2,6 +2,7 @@ using ChzzkApi.Extensions;
 using Glitzk.Platform;
 using Glitzk.Player;
 using Glitzk.Services;
+using Glitzk.Services.Commands;
 using Glitzk.UI;
 #if WINDOWS
 using Glitzk.Player.WebView2;
@@ -12,7 +13,7 @@ using Hexa.NET.ImGui.Backends.SDL3;
 using Hexa.NET.OpenGL;
 using Microsoft.Extensions.DependencyInjection;
 using SDL3;
-using System.IO;
+using System.Xml.Linq;
 
 namespace Glitzk;
 
@@ -42,6 +43,8 @@ class App : IDisposable
     private readonly ServiceProvider services;
     private readonly ChatService chat;
     private readonly VideoResolver resolver;
+    private readonly List<ChatCommand> commands = [];
+    private readonly Dictionary<string, ChatCommand> commandsByTrigger = [];
 
     //UI
     private readonly SettingsPanel settings;
@@ -134,7 +137,35 @@ class App : IDisposable
         var httpClientFactory = services.GetRequiredService<IHttpClientFactory>();
         chat = new ChatService(httpClientFactory, savedSettings.Credentials, inbox.Post, OnChat, alerts.Show, log.Write, alerts.Show, OnChatConnected);
         resolver = new VideoResolver(httpClientFactory);
+        LoadCommands();
         settings = new SettingsPanel(chat, playbackSettings, log);
+    }
+
+    private void LoadCommands()
+    {
+        (ChatCommand Command, string[] DefaultTriggers)[] defaults =
+        [
+            (new RequestCommand(resolver, playback, playbackSettings, inbox.Post, chat.Send), ["!sr", "!ㄴㄱ"]),
+        ];
+
+        foreach (var (command, defaultTriggers) in defaults)
+        {
+            commands.Add(command);
+
+            if (savedSettings.CommandOptions.TryGetValue(command.Name, out XElement? options))
+                command.FromXml(options);
+            else
+            {
+                foreach (string trigger in defaultTriggers)
+                    savedSettings.Commands.TryAdd(trigger, command.Name);
+            }
+        }
+
+        foreach (var (trigger, name) in savedSettings.Commands)
+        {
+            if (commands.Find(candidate => candidate.Name == name) is { } command)
+                commandsByTrigger[trigger] = command;
+        }
     }
 
     private IVideoPlayer CreatePlayer()
@@ -167,38 +198,26 @@ class App : IDisposable
         savedSettings.Credentials = chat.Credentials;
         savedSettings.Fallbacks = [.. playback.Fallbacks];
         savedSettings.SaveLog = log.IsEnabled;
+        savedSettings.Commands = commandsByTrigger.ToDictionary(pair => pair.Key, pair => pair.Value.Name);
+        savedSettings.CommandOptions = commands.ToDictionary(command => command.Name, command => command.ToXml());
         persistence.SaveSettings(savedSettings);
     }
 
     private void OnChatConnected()
     {
         SaveSettings();
-
+        
         if (playbackSettings.IsAutoPlayEnabled)
             playback.AdvanceIfIdle();
     }
 
-    private void OnChat(ChatMessage message)//임시형태
+    private void OnChat(ChatMessage message)
     {
-        Console.WriteLine(message);
-
-        string[] parts = message.Content.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
-        if (parts.Length < 2 || parts[0] != "!sr")
+        string[] parts = message.Content.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (parts.Length == 0 || !commandsByTrigger.TryGetValue(parts[0], out ChatCommand? command))
             return;
 
-        _ = ResolveAsync(parts[1], info => EnqueueRequest(info, message.Info));
-    }
-
-    private void EnqueueRequest(VideoInfo info, MessageInfo message)
-    {
-        TimeSpan maxDuration = playbackSettings.MaxRequestDuration;
-        if (maxDuration > TimeSpan.Zero && info.Duration > maxDuration)
-        {
-            string title = info.Title.Length > 8 ? $"{info.Title[..8]}..." : info.Title;
-            toasts.Show($"영상이 길이 제한 {maxDuration.TotalMinutes}분을 넘습니다: {title} ({info.DurationString()})"); // 임시. 나중에 채팅 반환으로 넘기기
-        }
-        else
-            playback.Enqueue(info, message);
+        command.Handle(message, parts.Length > 1 ? parts[1] : string.Empty);
     }
 
     private async Task ResolveAsync(string input, Action<VideoInfo> onResolved)
@@ -209,9 +228,9 @@ class App : IDisposable
             inbox.Post(() =>
             {
                 if (info == null)
-                    toasts.Show($"영상을 찾을 수 없습니다: {input}"); // 임시. 나중에 채팅 반환으로 넘기기 
+                    toasts.Show($"영상을 찾을 수 없습니다: {input}");
                 else if (info.IsLive)
-                    toasts.Show($"라이브/예정 방송은 추가할 수 없습니다: {info.Title}"); // 임시. 나중에 채팅 반환으로 넘기기 
+                    toasts.Show($"라이브/예정 방송은 추가할 수 없습니다: {info.Title}");
                 else
                     onResolved(info);
             });

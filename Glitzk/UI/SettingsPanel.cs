@@ -114,7 +114,7 @@ class SettingsPanel(ChatService chat, PlaybackSettings playbackSettings, LogWrit
     {
         // Todo: 로컬 입력테스트
         // Todo: 플레이어 초기화
-        ImGui.Checkbox("Skip search results without length", ref playbackSettings.IsSearchLengthFilterEnabled);
         ImGui.Checkbox("로그 저장", ref log.IsEnabled);
+        ImGui.Checkbox("Skip search results without length", ref playbackSettings.IsSearchLengthFilterEnabled);
     }
 }

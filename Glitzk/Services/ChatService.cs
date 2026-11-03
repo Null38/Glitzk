@@ -12,7 +12,7 @@ enum ChatStatus { Disconnected, Connecting, Connected }
 
 record MessageInfo(string SenderId, string Nickname, long Time);
 
-record ChatMessage(MessageInfo Info, string Content);
+record ChatMessage(MessageInfo Info, string Content, UserRoleCode Role);
 
 record Credentials(string ClientId, string ClientSecret, string? AccessToken, string? RefreshToken);
 
@@ -23,15 +23,18 @@ class ChatService
     private readonly Action<Action> post;
     private readonly Action<ChatMessage> onChat;
     private readonly Action<string> onConnectFailed;
-    private readonly Action<Exception> onSessionException;
+    private readonly Action<Exception> onException;
     private readonly Action<string> onDisconnected;
     private readonly Action onConnected;
     private readonly IHttpClientFactory httpClientFactory;
+    
+    private readonly Dictionary<string, int> sentReplies = [];
 
     private Credentials credentials;
     private ChzzkClient client;// Todo: ChzzkClient 수정하면 client를 readonly로 수정.
-    private CancellationTokenSource? attempt;
+    private ChzzkUser? user;
     private ChzzkSession? session;
+    private CancellationTokenSource? attempt;
 
     public ChatStatus Status { get; private set; }
 
@@ -47,7 +50,7 @@ class ChatService
         this.post = post;
         this.onChat = onChat;
         this.onConnectFailed = onConnectFailed;
-        this.onSessionException = onSessionException;
+        this.onException = onSessionException;
         this.onDisconnected = onDisconnected;
         this.onConnected = onConnected;
 
@@ -74,6 +77,50 @@ class ChatService
         Status = ChatStatus.Disconnected;
         _ = session?.DisconnectAsync();
         session = null;
+        user = null;
+        sentReplies.Clear();
+    }
+
+    public void Send(string text)
+    {
+        string reply = text.Trim();
+        if (reply.Length == 0 || user == null)
+            return;
+
+        sentReplies[reply] = sentReplies.GetValueOrDefault(reply) + 1;
+        _ = SendAsync(user, reply, attempt!.Token);
+    }
+
+    private async Task SendAsync(ChzzkUser sender, string reply, CancellationToken ct)
+    {
+        try
+        {
+            await sender.PostChatMessageAsync(reply, ct);
+        }
+        catch (Exception ex)
+        {
+            post(() =>
+            {
+                if (!ct.IsCancellationRequested)
+                {
+                    TryConsumeReply(reply);
+                    onException(ex);
+                }
+            });
+        }
+    }
+
+    private bool TryConsumeReply(string reply)
+    {
+        if (!sentReplies.TryGetValue(reply, out int count))
+            return false;
+
+        if (count > 1)
+            sentReplies[reply] = count - 1;
+        else
+            sentReplies.Remove(reply);
+
+        return true;
     }
 
     private void ApplyClientCredentials()// Todo: ChzzkClient 수정하면 여기도 수정.
@@ -116,6 +163,7 @@ class ChatService
                 }
 
                 session = connected;
+                this.user = user;
                 Status = ChatStatus.Connected;
                 onConnected();
             });
@@ -152,7 +200,7 @@ class ChatService
             post(() =>
             {
                 if (!ct.IsCancellationRequested)
-                    onSessionException(e.Exception);
+                    onException(e.Exception);
             });
         });
 
@@ -160,8 +208,13 @@ class ChatService
         {
             post(() =>
             {
-                if (!ct.IsCancellationRequested)
-                    onChat(new ChatMessage(new(chat.SenderChannelId, chat.Profile.Nickname, chat.MessageTime), chat.Content));
+                if (ct.IsCancellationRequested)
+                    return;
+
+                if (chat.Profile.UserRoleCode == UserRoleCode.Streamer && TryConsumeReply(chat.Content))
+                    return;
+
+                onChat(new ChatMessage(new(chat.SenderChannelId, chat.Profile.Nickname, chat.MessageTime), chat.Content, chat.Profile.UserRoleCode));
             });
             return Task.CompletedTask;
         };
