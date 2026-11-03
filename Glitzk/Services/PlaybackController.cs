@@ -113,8 +113,6 @@ class PlaybackController(IVideoPlayer player, PlaybackSettings settings, Action<
 
     public void OnPlayerEvent(PlayerEvent e)
     {
-        Console.WriteLine(e);//임시 테스트
-
         switch (e)
         {
             case PlayerReady:
@@ -141,6 +139,8 @@ class PlaybackController(IVideoPlayer player, PlaybackSettings settings, Action<
                 break;
         }
     }
+
+    public void Skip() => Advance();
 
     public void AdvanceIfIdle()
     {

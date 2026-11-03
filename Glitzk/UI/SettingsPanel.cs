@@ -2,9 +2,7 @@ using Glitzk.Services;
 using Glitzk.Services.Commands;
 using Hexa.NET.ImGui;
 using SDL3;
-using System;
 using System.Numerics;
-using System.Reflection.Emit;
 
 namespace Glitzk.UI;
 

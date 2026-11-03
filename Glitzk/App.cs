@@ -146,6 +146,9 @@ class App : IDisposable
         (ChatCommand Command, string[] DefaultTriggers)[] defaults =
         [
             (new RequestCommand(resolver, playback, playbackSettings, inbox.Post, chat.Send), ["!sr", "!ㄴㄱ"]),
+            (new CancelCommand(playback, chat.Send), ["!cx", "!ㅊㅌ"]),
+            (new SkipCommand(playback, chat.Send), ["!sk", "!나"]),
+            (new CurrentSongCommand(playback, chat.Send), ["!cs", "!ㅊㄴ"]),
         ];
 
         foreach (var (command, defaultTriggers) in defaults)
