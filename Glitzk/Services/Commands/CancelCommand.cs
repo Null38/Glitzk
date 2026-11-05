@@ -5,17 +5,17 @@ namespace Glitzk.Services.Commands;
 class CancelCommand(PlaybackController playback, Action<string> send)
     : ChatCommand(send)
 {
-    private string cancelled = "신청을 취소했습니다: {title}";
-    private string noRequest = "취소할 신청이 없습니다.";
+    private static readonly TextTemplate.TemplateArg[] NicknameArgs = [new("nickname", 30)];
+    private static readonly TextTemplate.TemplateArg[] TitleArgs = [new("nickname", 30), new("title", 40)];
+
+    private readonly TextTemplate cancelled = new("신청을 취소했습니다: {title}", TitleArgs);
+    private readonly TextTemplate noRequest = new("취소할 신청이 없습니다.", NicknameArgs);
 
     public override string Name => "Cancel";
 
     public override void Handle(ChatMessage message, string args)
     {
-        var values = new Dictionary<string, string>
-        {
-            ["nickname"] = message.Info.Nickname,
-        };
+        string nickname = message.Info.Nickname;
 
         LinkedListNode<VideoRequest>? latest = null;
         for (var node = playback.Requests.First; node != null; node = node.Next)
@@ -27,29 +27,29 @@ class CancelCommand(PlaybackController playback, Action<string> send)
 
         if (latest == null)
         {
-            Reply(noRequest, values);
+            Reply(noRequest, nickname);
             return;
         }
 
-        values["title"] = latest.Value.Video.Title;
+        string title = latest.Value.Video.Title;
         playback.RemoveRequest(latest);
-        Reply(cancelled, values);
+        Reply(cancelled, nickname, title);
     }
 
     public override void FromXml(XElement element)
     {
-        cancelled = ReadText(element, "Cancelled", cancelled);
-        noRequest = ReadText(element, "NoRequest", noRequest);
+        cancelled.Template = ReadText(element, "Cancelled", cancelled.Template);
+        noRequest.Template = ReadText(element, "NoRequest", noRequest.Template);
     }
 
     public override XElement ToXml() => new("Command",
         new XAttribute("name", Name),
-        new XElement("Cancelled", cancelled),
-        new XElement("NoRequest", noRequest));
+        new XElement("Cancelled", cancelled.Template),
+        new XElement("NoRequest", noRequest.Template));
 
     public override void DrawSettings()
     {
-        DrawReply("취소 완료", ref cancelled);
-        DrawReply("신청 없음", ref noRequest);
+        DrawReply("취소 완료", cancelled);
+        DrawReply("신청 없음", noRequest);
     }
 }

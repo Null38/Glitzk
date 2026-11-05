@@ -31,7 +31,7 @@ class ChatService
     private readonly Dictionary<string, int> sentReplies = [];
 
     private Credentials credentials;
-    private ChzzkClient client;// Todo: ChzzkClient 수정하면 client를 readonly로 수정.
+    private readonly ChzzkClient client;
     private ChzzkUser? user;
     private ChzzkSession? session;
     private CancellationTokenSource? attempt;
@@ -63,7 +63,7 @@ class ChatService
         if (clientId != credentials.ClientId || clientSecret != credentials.ClientSecret)
         {
             credentials = new Credentials(clientId, clientSecret, null, null);
-            ApplyClientCredentials();
+            client.SetCredentials(clientId, clientSecret);
         }
 
         Status = ChatStatus.Connecting;
@@ -121,12 +121,6 @@ class ChatService
             sentReplies.Remove(reply);
 
         return true;
-    }
-
-    private void ApplyClientCredentials()// Todo: ChzzkClient 수정하면 여기도 수정.
-    {
-        client = new ChzzkClient(httpClientFactory, credentials.ClientId, credentials.ClientSecret);
-        client.Rules.Add("TokenRefresh", RefreshTokenRule);
     }
 
     private async Task ConnectAsync(Credentials saved, CancellationToken ct)
