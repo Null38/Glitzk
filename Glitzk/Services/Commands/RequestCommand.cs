@@ -8,8 +8,9 @@ class RequestCommand(VideoResolver resolver, PlaybackController playback, Playba
 {
     private static readonly TextTemplate.TemplateArg[] InputArgs = [new("nickname", 30), new("input", 10)];
     private static readonly TextTemplate.TemplateArg[] VideoArgs = [new("nickname", 30), new("input", 10), new("title", 40), new("duration", 8), new("limit", 8)];
+    private static readonly TextTemplate.TemplateArg[] AcceptedArgs = [.. VideoArgs, new("index", 4)];
 
-    private readonly TextTemplate accepted = new("신청이 완료되었습니다 : {title}", VideoArgs);
+    private readonly TextTemplate accepted = new("신청이 완료되었습니다 : {title}", AcceptedArgs);
     private readonly TextTemplate tooLong = new("영상이 길이 제한 {limit}분을 넘습니다: {title} ({duration})", VideoArgs);
     private readonly TextTemplate liveRejected = new("라이브/예정 방송은 신청할 수 없습니다: {title}", VideoArgs);
     private readonly TextTemplate notFound = new("영상을 찾을 수 없습니다. 검색어: {input}", InputArgs);
@@ -58,8 +59,8 @@ class RequestCommand(VideoResolver resolver, PlaybackController playback, Playba
             Reply(tooLong, nickname, input, info.Title, duration, limit);
         else
         {
-            playback.Enqueue(info, message.Info);
-            Reply(accepted, nickname, input, info.Title, duration, limit);
+            int index = playback.Enqueue(info, message.Info);
+            Reply(accepted, nickname, input, info.Title, duration, limit, index.ToString(CultureInfo.InvariantCulture));
         }
     }
 

@@ -66,13 +66,17 @@ class PlaybackController(IVideoPlayer player, PlaybackSettings settings, Action<
         player.Pause();
     }
 
-    public void Enqueue(VideoInfo info, MessageInfo message)
+    public int Enqueue(VideoInfo info, MessageInfo message)
     {
         var request = new VideoRequest(info, message);
 
         var previous = Requests.Last;
+        int skipped = 0;
         while (previous != null && previous.Value.Info!.Time > message.Time)
+        {
             previous = previous.Previous;
+            skipped++;
+        }
 
         if (previous != null)
             Requests.AddAfter(previous, request);
@@ -86,6 +90,8 @@ class PlaybackController(IVideoPlayer player, PlaybackSettings settings, Action<
 
         if (Mode == PlaybackMode.Idle || isInterruptingFallback)
             Advance();
+
+        return Current == request ? 0 : Requests.Count - skipped;
     }
 
     public void RemoveRequest(LinkedListNode<VideoRequest> node) => Requests.Remove(node);

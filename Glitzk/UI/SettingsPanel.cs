@@ -204,10 +204,23 @@ class SettingsPanel(ChatService chat, PlaybackSettings playbackSettings, LogWrit
         ImGui.EndCombo();
     }
 
+    private const string TestReply = "테스트 출력입니다";
+
+    private bool isChatToastEnabled;
+    public bool IsChatToastEnabled => isChatToastEnabled;
+
     private void DrawDebug()
     {
-        // Todo: 로컬 입력테스트
         // Todo: 플레이어 초기화
+        ImGui.Checkbox("연결 확인", ref isChatToastEnabled);
+        ImGui.SetItemTooltip("수신한 채팅을 토스트로 표시합니다.");
+
+        ImGui.BeginDisabled(chat.Status != ChatStatus.Connected);
+        if (ImGui.Button("출력 확인"))
+            chat.Send(TestReply);
+        ImGui.EndDisabled();
+        ImGui.SetItemTooltip($"채팅에 \"{TestReply}\"를 보냅니다.");
+
         ImGui.Checkbox("로그 저장", ref log.IsEnabled);
         ImGui.Checkbox("Skip search results without length", ref playbackSettings.IsSearchLengthFilterEnabled);
     }

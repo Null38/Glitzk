@@ -216,6 +216,9 @@ class App : IDisposable
 
     private void OnChat(ChatMessage message)
     {
+        if (settings.IsChatToastEnabled)
+            toasts.Show($"{message.Info.Nickname}: {message.Content}");
+
         string[] parts = message.Content.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         if (parts.Length == 0 || !commandsByTrigger.TryGetValue(parts[0], out ChatCommand? command))
             return;
