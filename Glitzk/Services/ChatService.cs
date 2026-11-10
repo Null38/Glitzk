@@ -26,6 +26,7 @@ class ChatService
     private readonly Action<Exception> onException;
     private readonly Action<string> onDisconnected;
     private readonly Action onConnected;
+    private readonly Action onTokensChanged;
     private readonly IHttpClientFactory httpClientFactory;
     
     private readonly Dictionary<string, int> sentReplies = [];
@@ -43,7 +44,7 @@ class ChatService
     public string ClientSecret => credentials.ClientSecret;
 
     public ChatService(IHttpClientFactory httpClientFactory, Credentials credentials, Action<Action> post,
-        Action<ChatMessage> onChat, Action<string> onConnectFailed, Action<Exception> onSessionException, Action<string> onDisconnected, Action onConnected)
+        Action<ChatMessage> onChat, Action<string> onConnectFailed, Action<Exception> onSessionException, Action<string> onDisconnected, Action onConnected, Action onTokensChanged)
     {
         this.httpClientFactory = httpClientFactory;
         this.credentials = credentials;
@@ -53,6 +54,7 @@ class ChatService
         this.onException = onSessionException;
         this.onDisconnected = onDisconnected;
         this.onConnected = onConnected;
+        this.onTokensChanged = onTokensChanged;
 
         client = new ChzzkClient(httpClientFactory, credentials.ClientId, credentials.ClientSecret);
         client.Rules.Add("TokenRefresh", RefreshTokenRule);
@@ -298,10 +300,14 @@ class ChatService
 
     private void PostTokens(ChzzkUser.ChzzkToken token)
     {
-        post(() => credentials = credentials with
+        post(() =>
         {
-            AccessToken = token.AccessToken,
-            RefreshToken = token.RefreshToken
+            credentials = credentials with
+            {
+                AccessToken = token.AccessToken,
+                RefreshToken = token.RefreshToken
+            };
+            onTokensChanged();
         });
     }
 }

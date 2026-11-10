@@ -135,7 +135,7 @@ class App : IDisposable
         services = collection.BuildServiceProvider();
 
         var httpClientFactory = services.GetRequiredService<IHttpClientFactory>();
-        chat = new ChatService(httpClientFactory, savedSettings.Credentials, inbox.Post, OnChat, alerts.Show, log.Write, alerts.Show, OnChatConnected);
+        chat = new ChatService(httpClientFactory, persistence.LoadCredentials(), inbox.Post, OnChat, alerts.Show, log.Write, alerts.Show, OnChatConnected, SaveCredentials);
         resolver = new VideoResolver(httpClientFactory);
         LoadCommands();
         settings = new SettingsPanel(chat, playbackSettings, log, commands, commandsByTrigger);
@@ -198,7 +198,6 @@ class App : IDisposable
 
     private void SaveSettings()
     {
-        savedSettings.Credentials = chat.Credentials;
         savedSettings.Fallbacks = [.. playback.Fallbacks];
         savedSettings.SaveLog = log.IsEnabled;
         savedSettings.Commands = commandsByTrigger.ToDictionary(pair => pair.Key, pair => pair.Value.Name);
@@ -206,9 +205,11 @@ class App : IDisposable
         persistence.SaveSettings(savedSettings);
     }
 
+    private void SaveCredentials() => persistence.SaveCredentials(chat.Credentials);
+
     private void OnChatConnected()
     {
-        SaveSettings();
+        SaveCredentials();
         
         if (playbackSettings.IsAutoPlayEnabled)
             playback.AdvanceIfIdle();

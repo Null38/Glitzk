@@ -1,5 +1,7 @@
 using Glitzk.Services;
 using System.Globalization;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml;
 using System.Xml.Linq;
@@ -10,7 +12,6 @@ record WindowBounds(int X, int Y, int Width, int Height);
 
 class SavedSettings
 {
-    public Credentials Credentials = new(string.Empty, string.Empty, null, null);
     public PlaybackSettings Playback = new();
     public List<VideoInfo> Fallbacks = [];
     public Dictionary<string, string> Commands = [];
@@ -23,14 +24,20 @@ partial class Persistence
 {
     private const int MaxVolume = 100;
 
+    private const string key = "L1wwlnVy5";
+
+    private readonly string credentialsPath = Path.Combine(AppContext.BaseDirectory, "program.auth");
     private readonly string settingsPath = Path.Combine(AppContext.BaseDirectory, "program.setting");
     private readonly string queuePath = Path.Combine(AppContext.BaseDirectory, "program.queue");
     private readonly string windowsPath = Path.Combine(AppContext.BaseDirectory, "window.ini");
+
+    private static readonly Credentials EmptyCredentials = new(string.Empty, string.Empty, null, null);
 
     private readonly Action<string> onToast;
     private readonly Action<Exception> onLog;
 
     private string? lastSettingsText;
+    private string? lastCredentialsText;
 
     [GeneratedRegex(@"[\x00-\x08\x0B\x0C\x0E-\x1F￾￿]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]")]
     private static partial Regex InvalidXmlChars();
@@ -42,6 +49,79 @@ partial class Persistence
     }
 
     private static bool IsFileError(Exception ex) => ex is IOException or UnauthorizedAccessException;
+
+    #region Credentials
+
+    public Credentials LoadCredentials()
+    {
+        if (!File.Exists(credentialsPath))
+            return EmptyCredentials;
+
+        try
+        {
+            XElement root = XDocument.Load(credentialsPath).Root!;
+
+            return new Credentials(
+                (string?)root.Element("ClientId") ?? string.Empty,
+                Decrypt((string?)root.Element("ClientSecret"), key) ?? string.Empty,
+                Decrypt((string?)root.Element("AccessToken"), key),
+                Decrypt((string?)root.Element("RefreshToken"), key));
+        }
+        catch (Exception ex) when (ex is XmlException || IsFileError(ex))
+        {
+            onToast("인증 정보를 읽을 수 없습니다.");
+            onLog(ex);
+            return EmptyCredentials;
+        }
+    }
+
+    public void SaveCredentials(Credentials credentials)
+    {
+        string text = new XElement("Credentials",
+            new XElement("ClientId", credentials.ClientId),
+            new XElement("ClientSecret", Encrypt(credentials.ClientSecret, key)),
+            OptionalElement("AccessToken", Encrypt(credentials.AccessToken, key)),
+            OptionalElement("RefreshToken", Encrypt(credentials.RefreshToken, key))).ToString();
+
+        if (text != lastCredentialsText && WriteAtomically(credentialsPath, text))
+            lastCredentialsText = text;
+    }
+
+    private static string? Encrypt(string? plainText, string key)
+    {
+        if (plainText == null)
+            return null;
+
+        using Aes aes = CreateAes(key);
+        return Convert.ToBase64String(aes.EncryptCbc(Encoding.UTF8.GetBytes(plainText), aes.IV));
+    }
+
+    private static string? Decrypt(string? encoded, string key)
+    {
+        if (encoded == null)
+            return null;
+
+        try
+        {
+            using Aes aes = CreateAes(key);
+            return Encoding.UTF8.GetString(aes.DecryptCbc(Convert.FromBase64String(encoded), aes.IV));
+        }
+        catch (Exception ex) when (ex is FormatException or CryptographicException)
+        {
+            return null;
+        }
+    }
+
+    private static Aes CreateAes(string key)
+    {
+        byte[] keyBytes = Encoding.UTF8.GetBytes(key);
+        var aes = Aes.Create();
+        aes.Key = SHA256.HashData(keyBytes);
+        aes.IV = MD5.HashData(keyBytes);
+        return aes;
+    }
+
+    #endregion Credentials
 
     #region Settings
 
@@ -65,11 +145,6 @@ partial class Persistence
     {
         var settings = new SavedSettings
         {
-            Credentials = new Credentials(
-                (string?)root.Element("ClientId") ?? string.Empty,
-                (string?)root.Element("ClientSecret") ?? string.Empty,
-                (string?)root.Element("AccessToken"),
-                (string?)root.Element("RefreshToken")),
             SaveLog = ReadBool(root.Element("SaveLog")) ?? false,
         };
 
@@ -128,10 +203,6 @@ partial class Persistence
     public void SaveSettings(SavedSettings settings)
     {
         string text = new XElement("SaveData",
-            new XElement("ClientId", settings.Credentials.ClientId),
-            new XElement("ClientSecret", settings.Credentials.ClientSecret),
-            OptionalElement("AccessToken", settings.Credentials.AccessToken),
-            OptionalElement("RefreshToken", settings.Credentials.RefreshToken),
             new XElement("AutoPlayList", settings.Fallbacks.Select(video => new XElement("PlaylistEntry", WriteVideo(video)))),
             new XElement("SaveLog", settings.SaveLog),
             new XElement("Commands", settings.Commands.Select(command =>
@@ -143,28 +214,8 @@ partial class Persistence
             new XElement("IsAutoPlayEnabled", settings.Playback.IsAutoPlayEnabled),
             OptionalElement("Volume", settings.Volume)).ToString();
 
-        if (text == lastSettingsText)
-            return;
-
-        string tempPath = settingsPath + ".tmp";
-
-        try
-        {
-            using (var stream = new FileStream(tempPath, FileMode.Create, FileAccess.Write))
-            using (var writer = new StreamWriter(stream))
-            {
-                writer.Write(text);
-                writer.Flush();
-                stream.Flush(flushToDisk: true);
-            }
-
-            File.Move(tempPath, settingsPath, overwrite: true);
+        if (text != lastSettingsText && WriteAtomically(settingsPath, text))
             lastSettingsText = text;
-        }
-        catch (Exception ex) when (IsFileError(ex))
-        {
-            onLog(ex);
-        }
     }
 
     #endregion Settings
@@ -293,6 +344,31 @@ partial class Persistence
             ?? TimeSpan.FromSeconds(ReadInt(video.Element("durationSeconds")) ?? 0);
 
         return new VideoInfo(id, (string?)video.Element("title") ?? string.Empty, duration, IsLive: false);
+    }
+
+    // Writes to a temp file first so a crash mid-write cannot leave a truncated file behind.
+    private bool WriteAtomically(string path, string text)
+    {
+        string tempPath = path + ".tmp";
+
+        try
+        {
+            using (var stream = new FileStream(tempPath, FileMode.Create, FileAccess.Write))
+            using (var writer = new StreamWriter(stream))
+            {
+                writer.Write(text);
+                writer.Flush();
+                stream.Flush(flushToDisk: true);
+            }
+
+            File.Move(tempPath, path, overwrite: true);
+            return true;
+        }
+        catch (Exception ex) when (IsFileError(ex))
+        {
+            onLog(ex);
+            return false;
+        }
     }
 
     private static XElement WriteVideo(VideoInfo video) => new("Video",
