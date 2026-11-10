@@ -187,7 +187,11 @@ class SettingsPanel(ChatService chat, PlaybackSettings playbackSettings, LogWrit
 
         ImGui.NewLine();
 
+
         DrawCommandCombo("##Command", ref selectedCommandIndex);
+
+        ImGui.NewLine();
+
         commands[selectedCommandIndex].DrawSettings();
     }
 
