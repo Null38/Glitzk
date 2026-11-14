@@ -16,7 +16,7 @@
  
 ### 2. 프로그램 연동
  
-1. 프로그램에서 `Menu` → `Settings`로 이동합니다.
+1. 프로그램에서 `Menu` → `Settings` → `Chzzk` 로 이동합니다.
 2. `Chzzk Client Id`와 `Chzzk Client Secret`에 위에서 발급받은 값을 입력합니다.
 3. `Connect`를 누르면 인증 링크가 열리며 치지직 인증을 요구합니다.
 4. 인증을 완료하면 채팅창과 연동됩니다.
@@ -27,13 +27,3 @@
 - [SDL3-CS](https://github.com/edwardgushchin/SDL3-CS)
 - [Hexa.NET.ImGui](https://github.com/HexaEngine/Hexa.NET.ImGui)
 - [Hexa.NET.OpenGL](https://github.com/HexaEngine/Hexa.NET.OpenGL)
-
- # Todos
-1. 초기 시작용 재생 버튼 만들기 or Connect누르면 바로 재생?..
-2. 자동 재생 설정으로 On/Off 추가? 한다면 1.을 재생버튼으로
-3. 자동 재생 영상 무시하고 신청 리스트 재생을 우선할지 설정도 추가?
-4. 영상 길이 제한 설정 추가.
-5. 명령어 !cx(취소) !sk(스킵)추가. 재생되는 곡에 신청자 id를 저장하게 해서 자기가 신청한곡은 스킵이 가능하게 해야할듯. 스트리머나 관리자는 !sk을 어떤곡이든 가능하게? 권한 설정 고민해야함.
-6. 창 크기, 위치 저장 추가. 창 크기는 크기 바꿀때 업데이트는 하되 바로 저장은 시키지 말자. 프로그램 종료할때 저장을 추가해두는것으로 충분할듯. 
-7. 리모콘 추가. 재생, 정지, 스킵 등..
-8. iframe 볼륨 유지. 
