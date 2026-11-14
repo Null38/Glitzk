@@ -24,6 +24,10 @@
     <ProjectReference Include="..\Glitzk.Player\Glitzk.Player.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="Assets\spritesheet.png" LogicalName="Assets/spritesheet.png" />
+  </ItemGroup>
+
   <ItemGroup Condition="'$(TargetFramework)' == 'net9.0-windows'">
     <ProjectReference Include="..\Glitzk.Player.WebView2\Glitzk.Player.WebView2.csproj" />
   </ItemGroup>

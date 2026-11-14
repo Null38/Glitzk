@@ -58,6 +58,8 @@ class App : IDisposable
 
     private readonly nint glContext;
     private readonly GL gl;
+    private readonly SpriteSheet spriteSheet;
+    private readonly MouseCursors mouseCursors;
     private readonly ImGuiIOPtr io;
 
     public App()
@@ -105,6 +107,7 @@ class App : IDisposable
         io = ImGui.GetIO();
         io.ConfigFlags |= ImGuiConfigFlags.NavEnableKeyboard;
         io.ConfigFlags |= ImGuiConfigFlags.ViewportsEnable;
+        io.ConfigFlags |= ImGuiConfigFlags.NoMouseCursorChange;
 
         LoadFont();
         ImGui.StyleColorsDark();
@@ -119,6 +122,8 @@ class App : IDisposable
         ImGuiImplOpenGL3.Init("#version 130");
 
         gl = new GL(new GlBindingsContext(main.Handle, glContext));
+        spriteSheet = new SpriteSheet(gl);
+        mouseCursors = new MouseCursors(spriteSheet);
 
         player = CreatePlayer();
         playback = new PlaybackController(player, playbackSettings, video => toasts.Show($"재생할 수 없어 건너뛰었습니다: {video.Title}"), OnPlayerFailed);
@@ -299,6 +304,7 @@ class App : IDisposable
         settings.Draw();
         toasts.Draw();
 
+        mouseCursors.Apply();
         ImGui.Render();
         ImGui.EndFrame();
 
@@ -369,7 +375,7 @@ class App : IDisposable
                 chat.Disconnect();
         }
 
-        VideoListPanel.DrawRequests(playback.Requests, playback.RemoveRequest, playback.MoveRequest, sectionWidth);
+        VideoListPanel.DrawRequests(playback.Requests, playback.RemoveRequest, playback.MoveRequest, mouseCursors, sectionWidth);
 
         ImGui.EndGroup();
 
@@ -438,6 +444,8 @@ class App : IDisposable
         ImGuiImplOpenGL3.Shutdown();
         ImGuiImplSDL3.Shutdown();
         ImGui.DestroyContext();
+        mouseCursors.Dispose();
+        spriteSheet.Dispose();
         gl.Dispose();
         SDL.GLDestroyContext(glContext);
 

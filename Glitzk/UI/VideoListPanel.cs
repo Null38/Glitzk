@@ -21,6 +21,7 @@ static class VideoListPanel
         LinkedList<VideoRequest> requests,
         Action<LinkedListNode<VideoRequest>> remove,
         Action<LinkedListNode<VideoRequest>, LinkedListNode<VideoRequest>?> move,
+        MouseCursors cursors,
         float width)
     {
         ImGui.PushStyleColor(ImGuiCol.ChildBg, ImGui.GetColorU32(ImGuiCol.MenuBarBg));
@@ -53,13 +54,19 @@ static class VideoListPanel
                 ImGui.PopStyleVar();
 
             if (ImGui.IsItemHovered())
-                ImGui.SetMouseCursor(ImGuiMouseCursor.Hand);//임시 커서
+                cursors.Set(CustomCursor.Grab);
 
-            if (ImGui.BeginDragDropSource())
+            var io = ImGui.GetIO();
+            float dragThreshold = io.MouseDragThreshold;
+            io.MouseDragThreshold = 0f;
+            bool isDragSource = ImGui.BeginDragDropSource();
+            io.MouseDragThreshold = dragThreshold;
+
+            if (isDragSource)
             {
                 dragged = item;
                 ImGui.SetDragDropPayload("QueueItem", null, 0);
-                ImGui.SetMouseCursor(ImGuiMouseCursor.ResizeAll);//임시 커서
+                cursors.Set(CustomCursor.Grabbing);
                 ImGui.TextUnformatted(item.Value.Video.Title);
                 ImGui.EndDragDropSource();
             }
