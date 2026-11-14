@@ -33,6 +33,8 @@ class App : IDisposable
     private const uint MinimizedDelayMs = 16;
     private static readonly TimeSpan VolumeReadTimeout = TimeSpan.FromSeconds(2);
 
+    private const int SpriteSize = 32;
+
     private readonly AppWindow main;
     private readonly AppWindow video;
 
@@ -60,6 +62,7 @@ class App : IDisposable
     private readonly GL gl;
     private readonly SpriteSheet spriteSheet;
     private readonly MouseCursors mouseCursors;
+    private readonly RemoteControl remoteControl;
     private readonly ImGuiIOPtr io;
 
     public App()
@@ -123,7 +126,16 @@ class App : IDisposable
 
         gl = new GL(new GlBindingsContext(main.Handle, glContext));
         spriteSheet = new SpriteSheet(gl);
-        mouseCursors = new MouseCursors(spriteSheet);
+
+        nint grab = spriteSheet.CreateCursor(0, 0, SpriteSize, SpriteSize, 16, 16);
+        nint grabbing = spriteSheet.CreateCursor(SpriteSize, 0, SpriteSize, SpriteSize, 16, 16);
+
+        Sprite play = spriteSheet.Slice(0, SpriteSize, SpriteSize, SpriteSize);
+        Sprite pause = spriteSheet.Slice(SpriteSize, SpriteSize, SpriteSize, SpriteSize);
+        Sprite skip = spriteSheet.Slice(SpriteSize * 2, SpriteSize, SpriteSize, SpriteSize);
+
+        mouseCursors = new MouseCursors(grab, grabbing);
+        remoteControl = new RemoteControl(spriteSheet, play, pause, skip);
 
         player = CreatePlayer();
         playback = new PlaybackController(player, playbackSettings, video => toasts.Show($"재생할 수 없어 건너뛰었습니다: {video.Title}"), OnPlayerFailed);
@@ -374,6 +386,9 @@ class App : IDisposable
             else
                 chat.Disconnect();
         }
+
+        ImGui.SameLine(sectionWidth - RemoteControl.Width);
+        remoteControl.Draw(playback);
 
         VideoListPanel.DrawRequests(playback.Requests, playback.RemoveRequest, playback.MoveRequest, mouseCursors, sectionWidth);
 

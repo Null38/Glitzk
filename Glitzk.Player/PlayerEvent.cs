@@ -1,6 +1,6 @@
 namespace Glitzk.Player;
 
-public enum PlaybackState { Unstarted, Playing, Paused, Buffering, Ended }
+public enum PlaybackState { Unstarted, Playing, Paused, Buffering, Ended, Cued }
 
 public abstract record PlayerEvent;
 

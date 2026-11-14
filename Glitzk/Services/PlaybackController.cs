@@ -168,6 +168,7 @@ class PlaybackController(IVideoPlayer player, PlaybackSettings settings, Action<
 
         if (next == null)
         {
+            player.Stop();
             Mode = PlaybackMode.Idle;
             return;
         }

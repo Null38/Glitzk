@@ -12,8 +12,6 @@ enum CustomCursor
 
 class MouseCursors : IDisposable
 {
-    private const int SpriteSize = 32;
-
     private CustomCursor? requested;
     private nint applied;
 
@@ -21,13 +19,7 @@ class MouseCursors : IDisposable
 
     private readonly nint[] custom = new nint[(int)CustomCursor.Count];
 
-    private void InitializeCustomCursors(SpriteSheet sheet)
-    {
-        custom[(int)CustomCursor.Grab] = sheet.CreateCursor(0, 0, SpriteSize, SpriteSize, 16, 16);
-        custom[(int)CustomCursor.Grabbing] = sheet.CreateCursor(SpriteSize, 0, SpriteSize, SpriteSize, 16, 16);
-    }
-
-    public MouseCursors(SpriteSheet sheet)
+    public MouseCursors(nint grab, nint grabbing)
     {
         for (var cursor = ImGuiMouseCursor.Arrow; cursor < ImGuiMouseCursor.Count; cursor++)
         {
@@ -52,7 +44,8 @@ class MouseCursors : IDisposable
                 throw new InvalidOperationException($"Error creating system cursor {id}: {SDL.GetError()}");
         }
 
-        InitializeCustomCursors(sheet);
+        custom[(int)CustomCursor.Grab] = grab;
+        custom[(int)CustomCursor.Grabbing] = grabbing;
 
         applied = system[(int)ImGuiMouseCursor.Arrow];
     }

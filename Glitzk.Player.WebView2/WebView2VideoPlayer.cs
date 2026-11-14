@@ -176,6 +176,7 @@ public class WebView2VideoPlayer : IVideoPlayer
                 1 => PlaybackState.Playing,
                 2 => PlaybackState.Paused,
                 3 => PlaybackState.Buffering,
+                5 => PlaybackState.Cued,
                 var state => throw new InvalidOperationException($"Unknown YouTube player state {state}"),
             }),
             "error" => new PlayerError(LoadId(), $"YouTube player error {root.GetProperty("code").GetInt32()}"),
