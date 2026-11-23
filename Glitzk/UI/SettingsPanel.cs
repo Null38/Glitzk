@@ -132,6 +132,9 @@ class SettingsPanel(ChatService chat, PlaybackSettings playbackSettings, LogWrit
         ImGui.InputText("##Client Secret", ref clientSecret, CredentialBufferSize, ImGuiInputTextFlags.Password);
 
         ImGui.EndDisabled();
+
+        ImGui.Checkbox("자동 연결##Auto Connect", ref savedSettings.IsAutoConnectEnabled);
+        ImGui.SetItemTooltip("프로그램 시작 시, 자동으로 채팅창에 연결을 시도합니다.");
     }
 
     private const int TriggerBufferSize = 32;

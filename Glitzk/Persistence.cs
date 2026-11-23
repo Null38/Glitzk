@@ -18,6 +18,7 @@ class SavedSettings
     public Dictionary<string, XElement> CommandOptions = [];
     public bool SaveLog;
     public bool IsVideoWindowDetached;
+    public bool IsAutoConnectEnabled;
     public int? Volume;
 }
 
@@ -148,6 +149,7 @@ partial class Persistence
         {
             SaveLog = ReadBool(root.Element("SaveLog")) ?? false,
             IsVideoWindowDetached = ReadBool(root.Element("VideoWindowDetached")) ?? false,
+            IsAutoConnectEnabled = ReadBool(root.Element("AutoConnect")) ?? false,
         };
 
         PlaybackSettings playback = settings.Playback;
@@ -208,6 +210,7 @@ partial class Persistence
             new XElement("AutoPlayList", settings.Fallbacks.Select(video => new XElement("PlaylistEntry", WriteVideo(video)))),
             new XElement("SaveLog", settings.SaveLog),
             new XElement("VideoWindowDetached", settings.IsVideoWindowDetached),
+            new XElement("AutoConnect", settings.IsAutoConnectEnabled),
             new XElement("Commands", settings.Commands.Select(command =>
                 new XElement("Command", new XAttribute("key", command.Key), command.Value))),
             new XElement("CommandOptions", settings.CommandOptions.Values),

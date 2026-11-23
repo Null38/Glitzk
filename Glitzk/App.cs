@@ -158,6 +158,9 @@ class App : IDisposable
         resolver = new VideoResolver(httpClientFactory);
         LoadCommands();
         settings = new SettingsPanel(chat, playbackSettings, log, commands, commandsByTrigger, savedSettings);
+
+        if (savedSettings.IsAutoConnectEnabled)
+            chat.Connect(settings.ClientId, settings.ClientSecret);
     }
 
     private void ApplyVideoWindowDetached()
