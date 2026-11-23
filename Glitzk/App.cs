@@ -65,6 +65,8 @@ class App : IDisposable
     private readonly RemoteControl remoteControl;
     private readonly ImGuiIOPtr io;
 
+    private bool appliedVideoWindowDetached;
+
     public App()
     {
         log = new LogWriter(message => inbox.Post(() => alerts.Show(message)));
@@ -89,7 +91,7 @@ class App : IDisposable
 #endif
 
         SDL.SetWindowMinimumSize(main.Handle, MinWindowWidth, MinWindowHeight);
-        SDL.SetWindowParent(video.Handle, main.Handle);
+        ApplyVideoWindowDetached();
 
         var (mainBounds, videoBounds) = persistence.LoadWindows();
         if (mainBounds != null)
@@ -155,7 +157,14 @@ class App : IDisposable
         chat = new ChatService(httpClientFactory, persistence.LoadCredentials(), inbox.Post, OnChat, alerts.Show, log.Write, alerts.Show, OnChatConnected, SaveCredentials);
         resolver = new VideoResolver(httpClientFactory);
         LoadCommands();
-        settings = new SettingsPanel(chat, playbackSettings, log, commands, commandsByTrigger);
+        settings = new SettingsPanel(chat, playbackSettings, log, commands, commandsByTrigger, savedSettings);
+    }
+
+    private void ApplyVideoWindowDetached()
+    {
+        bool isDetached = savedSettings.IsVideoWindowDetached;
+        SDL.SetWindowParent(video.Handle, isDetached ? nint.Zero : main.Handle);
+        appliedVideoWindowDetached = isDetached;
     }
 
     private void LoadCommands()
@@ -280,6 +289,7 @@ class App : IDisposable
                 switch ((SDL.EventType)e.Type)
                 {
                     case SDL.EventType.Quit:
+                    case SDL.EventType.WindowCloseRequested when e.Window.WindowID == main.Id:
                         running = false;
                         break;
 
@@ -291,6 +301,9 @@ class App : IDisposable
 
             player.Tick();
             inbox.Drain();
+
+            if (savedSettings.IsVideoWindowDetached != appliedVideoWindowDetached)
+                ApplyVideoWindowDetached();
 
             if ((SDL.GetWindowFlags(main.Handle) & SDL.WindowFlags.Minimized) != 0)
             {

@@ -76,7 +76,7 @@ public class WebView2VideoPlayer : IVideoPlayer
         this.hwnd = hwnd;
         this.onEvent = onEvent;
 
-        var options = new CoreWebView2EnvironmentOptions("--autoplay-policy=no-user-gesture-required");
+        var options = new CoreWebView2EnvironmentOptions("--autoplay-policy=no-user-gesture-required --disable-features=AudioServiceOutOfProcess");
         envTask = CoreWebView2Environment.CreateAsync(null, null, options);
     }
 

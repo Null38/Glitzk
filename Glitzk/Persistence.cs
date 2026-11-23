@@ -17,6 +17,7 @@ class SavedSettings
     public Dictionary<string, string> Commands = [];
     public Dictionary<string, XElement> CommandOptions = [];
     public bool SaveLog;
+    public bool IsVideoWindowDetached;
     public int? Volume;
 }
 
@@ -146,6 +147,7 @@ partial class Persistence
         var settings = new SavedSettings
         {
             SaveLog = ReadBool(root.Element("SaveLog")) ?? false,
+            IsVideoWindowDetached = ReadBool(root.Element("VideoWindowDetached")) ?? false,
         };
 
         PlaybackSettings playback = settings.Playback;
@@ -205,6 +207,7 @@ partial class Persistence
         string text = new XElement("SaveData",
             new XElement("AutoPlayList", settings.Fallbacks.Select(video => new XElement("PlaylistEntry", WriteVideo(video)))),
             new XElement("SaveLog", settings.SaveLog),
+            new XElement("VideoWindowDetached", settings.IsVideoWindowDetached),
             new XElement("Commands", settings.Commands.Select(command =>
                 new XElement("Command", new XAttribute("key", command.Key), command.Value))),
             new XElement("CommandOptions", settings.CommandOptions.Values),

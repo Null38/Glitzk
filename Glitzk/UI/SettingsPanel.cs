@@ -7,9 +7,10 @@ using System.Numerics;
 namespace Glitzk.UI;
 
 class SettingsPanel(ChatService chat, PlaybackSettings playbackSettings, LogWriter log,
-    IReadOnlyList<ChatCommand> commands, Dictionary<string, ChatCommand> commandsByTrigger)
+    IReadOnlyList<ChatCommand> commands, Dictionary<string, ChatCommand> commandsByTrigger,
+    SavedSettings savedSettings)
 {
-    private enum SettingsCategory { Playback, Chzzk, Commands, Debug }
+    private enum SettingsCategory { Video, Chzzk, Commands, Debug }
 
     private const int CredentialBufferSize = 128;
 
@@ -67,8 +68,8 @@ class SettingsPanel(ChatService chat, PlaybackSettings playbackSettings, LogWrit
 
         switch (selectedCategory)
         {
-            case SettingsCategory.Playback:
-                DrawPlayback();
+            case SettingsCategory.Video:
+                DrawVideo();
                 break;
             case SettingsCategory.Chzzk:
                 DrawChzzk();
@@ -87,8 +88,10 @@ class SettingsPanel(ChatService chat, PlaybackSettings playbackSettings, LogWrit
         ImGui.EndChild();
     }
 
-    private void DrawPlayback()
+    private void DrawVideo()
     {
+        ImGui.SeparatorText("Playback");
+
         ImGui.Checkbox("자동 재생", ref playbackSettings.IsAutoPlayEnabled);
         ImGui.SetItemTooltip("치지직 채팅에 연결되면 자동으로 영상을 재생합니다.");
 
@@ -99,6 +102,11 @@ class SettingsPanel(ChatService chat, PlaybackSettings playbackSettings, LogWrit
         int maxMinutes = (int)playbackSettings.MaxRequestDuration.TotalMinutes;
         if (ImGui.InputInt("##Max Request Minutes", ref maxMinutes))
             playbackSettings.MaxRequestDuration = TimeSpan.FromMinutes(Math.Max(0, maxMinutes));
+
+        ImGui.SeparatorText("Window");
+
+        ImGui.Checkbox("영상 창 분리", ref savedSettings.IsVideoWindowDetached);
+        ImGui.SetItemTooltip("영상창이 메인창에 종속되지 않게 됩니다.");
     }
 
     private string clientId = chat.ClientId;
